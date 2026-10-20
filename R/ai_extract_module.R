@@ -28,7 +28,7 @@ ai_extract_ui <- function() {
     textAreaInput("ai_notes", "Instructions for the AI (optional)", rows = 2, width = "100%",
                   placeholder = "e.g. use intention-to-treat; ignore the per-protocol analysis"),
     div(class = "ai-run-row",
-      actionButton("ai_run", "Extract with AI", class = "btn-primary btn-sm"),
+      actionButton("ai_run", "Extract with AI", class = "btn-primary btn-sm", disabled = TRUE),
       actionButton("ai_cancel", "Stop", class = "btn-outline-secondary btn-sm"),
       textOutput("ai_progress", inline = TRUE)),
     div(class = "aside", "The AI reads each article and fills the table with the page and sentence behind every number. You review it before it is used.")
@@ -153,6 +153,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   })
 
   output$ai_extract_reason <- renderUI(if (!ai$ready()) div(class = "notice info", ai$reason()))
+  observe(updateActionButton(session, "ai_run", disabled = !ai$ready()))
   output$ai_progress <- renderText(progress())
 
   output$ai_errors <- renderUI({

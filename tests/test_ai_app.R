@@ -203,4 +203,21 @@ testServer(app, {
   ok("warning: arms far from the total in the quote")
 })
 
+testServer(app, {
+  # the button itself is disabled while the AI is not ready (not only the reason shown)
+  sent <- list()
+  session$sendInputMessage <- function(inputId, message) sent[[length(sent) + 1]] <<- c(list(id = inputId), message)
+  run_disabled <- function() { m <- Filter(function(x) identical(x$id, "ai_run") && !is.null(x$disabled), sent)
+    if (length(m)) m[[length(m)]]$disabled else NA }
+  forest_inputs(session); ready_ai(session)
+  stopifnot(identical(run_disabled(), FALSE))
+  session$setInputs(ai_forget_key = 1)
+  stopifnot(identical(run_disabled(), TRUE))
+  ok("extract button disabled when not ready")
+})
+source("R/ai_extract_module.R")
+run_btn <- regmatches(u <- as.character(ai_extract_ui()), regexpr('<button[^>]*id="ai_run"[^>]*>', u))
+stopifnot(length(run_btn) == 1, grepl(" disabled", run_btn))
+ok("extract button starts disabled")
+
 cat("AI EXTRACTION TESTS PASSED\n")

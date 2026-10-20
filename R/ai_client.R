@@ -42,8 +42,12 @@ ai_http_transport <- function(body, key) {
     httr2::req_retry(max_tries = 3, retry_on_failure = TRUE,
                      is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 504, 529)) |>
     httr2::req_error(is_error = function(resp) FALSE)
-  resp <- tryCatch(httr2::req_perform(req), error = function(e) NULL)
-  if (is.null(resp)) return(list(status = 0L, body_text = ""))
+  resp <- tryCatch(httr2::req_perform(req), error = function(e) e)
+  # no answer at all: status 0, and whether the wait ran out (httr2 wraps the curl error as `parent`)
+  if (inherits(resp, "error")) {
+    timeout <- inherits(resp, "curl_error_operation_timedout") || inherits(resp$parent, "curl_error_operation_timedout")
+    return(list(status = 0L, body_text = "", error = if (timeout) "timeout" else "network"))
+  }
   list(status = httr2::resp_status(resp),
        body_text = if (httr2::resp_has_body(resp)) httr2::resp_body_string(resp) else "")
 }
@@ -66,6 +70,7 @@ AI_ERRORS <- c(
   truncated = "The AI answer was cut off before the end, so it was not used. Try again, or send fewer pages.",
   bad_json = "The AI answer could not be read, so it was not used. Try again.",
   network = "Could not reach the AI service. Check the internet connection.",
+  timeout = "The AI service took too long to answer (more than 5 minutes). Try again, or send fewer pages.",
   limit_reached = "The AI limit for this session was reached.")
 
 ai_fail <- function(code, detail = "", key = "") {
@@ -78,7 +83,7 @@ ai_parse <- function(resp, key = "") {
   st <- as.integer(resp$status)
   if (st != 200L) {
     api_msg <- tryCatch(jsonlite::fromJSON(resp$body_text)$error$message, error = function(e) NULL)
-    code <- if (st == 0L) "network" else if (st %in% c(401L, 403L)) "bad_key" else if (st == 429L) "rate_limited"
+    code <- if (st == 0L) (if (identical(resp$error, "timeout")) "timeout" else "network") else if (st %in% c(401L, 403L)) "bad_key" else if (st == 429L) "rate_limited"
             else if (st == 413L) "too_large" else if (st >= 500L) "overloaded" else "bad_request"
     return(ai_fail(code, if (code == "bad_request" && is.character(api_msg)) api_msg[1] else "", key))
   }

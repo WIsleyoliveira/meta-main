@@ -20,7 +20,7 @@ proj_write <- function(path, dig, km_files, settings) {
 # Returns list(ok, error, project). Checks everything it reads: shape, columns, sizes.
 proj_read <- function(path) {
   fail <- function(m) list(ok = FALSE, error = m)
-  if (!file.exists(path) || file.size(path) > 20e6) return(fail("The project file is missing or too large."))
+  if (!file.exists(path) || file.size(path) > MAX_FILE_BYTES) return(fail("The project file is missing or too large."))
   obj <- tryCatch(jsonlite::fromJSON(paste(readLines(path, warn = FALSE, encoding = "UTF-8"), collapse = "\n"), simplifyVector = TRUE, simplifyDataFrame = TRUE),
                   error = function(e) NULL)
   if (!is.list(obj) || !obj$app %in% c("Ponderis", "Meta-Forest")) return(fail("This is not a Ponderis project file."))

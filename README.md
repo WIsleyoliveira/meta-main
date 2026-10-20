@@ -228,8 +228,9 @@ Before launching publicly, decide on:
 - **Privacy text.** The app does not store uploads (they live in the user's session and
   are deleted when it ends), and the footer says so. Keep that true on your host: do not
   enable request logging of uploaded files.
-- **Limits.** Uploads are capped at 32 MB (for PDFs sent to the AI) and CSVs at 2000 rows (`options(shiny.maxRequestSize)` in
-  `app.R`, `MAX_ROWS` in `R/helpers.R`).
+- **Limits.** Uploads are capped at 32 MB (for PDFs sent to the AI, which takes up to 24 MB per PDF), CSV and project
+  files at 5 MB, and CSVs at 2000 rows (`options(shiny.maxRequestSize)` in `app.R`, `MAX_FILE_BYTES` and `MAX_ROWS` in
+  `R/helpers.R`). The 5 MB check runs once the file has arrived, so a larger CSV still travels to the server before it is refused.
 - **AI.** To offer the AI with your own key, set `ANTHROPIC_API_KEY` (and optionally `PONDERIS_AI_MAX_CALLS`) in the server
   environment, for example in `.Renviron`; you pay for all use. `PONDERIS_AI_MAX_CALLS` caps the calls of one browser
   session, not of a user or of the server: reloading the page starts a new session with a fresh count, so it does not

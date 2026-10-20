@@ -7,7 +7,7 @@ library(bslib)
 library(DT)
 library(meta)
 
-options(shiny.maxRequestSize = 32 * 1024^2)  # 32 MB upload limit (PDFs for the AI; CSVs are capped by MAX_ROWS)
+options(shiny.maxRequestSize = 32 * 1024^2)  # 32 MB upload limit, for the AI's PDFs; CSV and project files stop at MAX_FILE_BYTES (5 MB)
 
 app_theme <- bs_theme(
   version = 5, bg = "#ECEFF2", fg = "#0F1B27", primary = "#1E3A5F",

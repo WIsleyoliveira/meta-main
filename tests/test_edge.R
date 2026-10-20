@@ -87,4 +87,9 @@ for (s in c("none", "year", "effect", "weight")) for (l in c("meta", "RevMan5", 
   r <- run(d, "dich", list(sort = s, layout = l, model = "both", pi = TRUE, details = TRUE), grp = "subgroup", yr = "year")
 }
 ok("all 4 sort options x 4 layouts x both models draw without error")
+# uploads may be up to 32 MB for the AI's PDFs; a CSV above 5 MB is refused before it is read
+bigcsv <- tempfile(fileext = ".csv"); writeLines(c("study_id,events_tx", rep(paste0("S,", strrep("1", 1000)), 5300)), bigcsv)
+e <- tryCatch(read_user_csv(bigcsv), error = function(e) conditionMessage(e))
+stopifnot(file.size(bigcsv) > 5 * 1024^2, is.character(e), grepl("5 MB", e))
+ok("CSV above 5 MB is refused")
 cat("EDGE TESTS PASSED\n")

@@ -145,6 +145,8 @@ example_data <- function(type) {
 
 NA_STRINGS <- c("", "NA", "na", "N/A", "n/a", "NaN", ".")
 MAX_ROWS <- 2000
+# CSV and project files; only the PDFs for the AI may be larger (options(shiny.maxRequestSize) in app.R)
+MAX_FILE_BYTES <- 5 * 1024^2
 
 # Returns list(data, sep, enc). Everything is read as text; numbers are converted
 # later so that decimal commas (Brazilian/European Excel) work. Files saved by
@@ -152,6 +154,7 @@ MAX_ROWS <- 2000
 BOM_PATTERN <- "^(\ufeff|\u00ef\\.\\.)"
 
 read_user_csv <- function(path) {
+  if (file.size(path) > MAX_FILE_BYTES) stop("The file is larger than 5 MB. Remove unused rows or columns.")
   lines <- readLines(path, warn = FALSE)
   if (!length(lines)) stop("The file is empty.")
   enc <- if (all(validUTF8(lines))) "UTF-8" else "latin1"

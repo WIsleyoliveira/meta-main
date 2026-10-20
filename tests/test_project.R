@@ -19,4 +19,6 @@ bad <- function(txt) { g <- tempfile(); writeLines(txt, g); proj_read(g) }
 ok(!bad("not json")$ok && !bad('{"app":"other"}')$ok && !bad('{"app":"Ponderis","format":99}')$ok, "wrong files are refused")
 ok(!bad('{"app":"Ponderis","format":1,"digitizer":{"curve":[{"a":1}]}}')$ok, "a table with missing columns is refused")
 ok(!proj_read("/no/such/file")$ok, "missing file is refused")
+bigp <- tempfile(fileext = ".json"); writeBin(raw(6 * 1024^2), bigp)
+ok(!proj_read(bigp)$ok && grepl("too large", proj_read(bigp)$error), "project file above 5 MB is refused")
 b2 <- bad('{"app":"Ponderis","format":1,"settings":{"scale":"percent","evil":"x","xmax":[1,2]}}'); ok(b2$ok && identical(names(b2$project$settings), "scale"), "unknown or malformed settings are dropped")

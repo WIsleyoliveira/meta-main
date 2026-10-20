@@ -1,7 +1,7 @@
 # AI panel and PDF extraction in the Shiny server (shiny::testServer), with a fake transport:
 # no network, no key, no cost.
 suppressMessages({library(shiny); library(meta)})
-source("R/helpers.R")
+source("R/helpers.R"); source("R/ai_client.R"); source("R/ai_extract.R")
 ok <- function(name) cat("ok:", name, "\n")
 app <- shinyAppDir(".")
 Sys.unsetenv(c("ANTHROPIC_API_KEY", "PONDERIS_AI_MAX_CALLS"))
@@ -163,6 +163,35 @@ testServer(app, {
   session$setInputs(ai_retry = 1)
   stopifnot(nrow(ai_x$table()) == 2, !grepl("article1.pdf", html(output$ai_errors)))
   ok("retry")
+})
+
+# review fixes
+pending <- list()
+options(ponderis.ai_runner = function(job, done) pending[[length(pending) + 1]] <<- list(job = job, done = done))
+testServer(app, {
+  forest_inputs(session); ready_ai(session)
+  session$setInputs(ai_pdfs = pdfs(2), ai_run = 1)
+  stopifnot(length(pending) == 1)
+  session$setInputs(ai_discard = 1)
+  late <- list(ok = TRUE, name = "article1.pdf", cells = ai_cells_long(list(), "dich"), ambiguities = character(0),
+               usage = list(input_tokens = 1, output_tokens = 1), called = TRUE)
+  pending[[1]]$done(late)
+  session$flushReact()
+  stopifnot(length(ai_x$results()) == 0, length(pending) == 1)
+  session$setInputs(ai_run = 2)
+  stopifnot(length(pending) == 2)
+  ok("discard during a run")
+})
+options(ponderis.ai_runner = "sync")
+
+testServer(app, {
+  # the panel is rebuilt each time it opens; it must show the consent already given, or opening it would withdraw it
+  session$setInputs(ai_consent = TRUE)
+  m <- as.character(ai$panel())
+  stopifnot(grepl('id="ai_consent" checked', m, fixed = TRUE) || grepl('checked="checked"', m, fixed = TRUE))
+  session$setInputs(ai_consent = FALSE)
+  stopifnot(!grepl("checked", as.character(ai$panel()), fixed = TRUE))
+  ok("reopening the panel keeps consent")
 })
 
 cat("AI EXTRACTION TESTS PASSED\n")

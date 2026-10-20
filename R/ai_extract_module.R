@@ -38,19 +38,19 @@ ai_extract_ui <- function() {
 # Background runner: one ExtendedTask; its mirai worker loads the plain AI functions and runs ai_run_job().
 ai_runner_mirai <- function() {
   dir <- normalizePath(".")
-  done_cb <- NULL
+  waiting <- list()   # callbacks in the order the jobs were handed to the task
   task <- ExtendedTask$new(function(job) mirai::mirai({
     source(file.path(dir, "R", "helpers.R")); source(file.path(dir, "R", "ai_client.R")); source(file.path(dir, "R", "ai_extract.R"))
     ai_run_job(job)
   }, job = job, dir = dir))
   observeEvent(task$status(), {
     st <- task$status()
-    if (!st %in% c("success", "error") || is.null(done_cb)) return()
-    cb <- done_cb; done_cb <<- NULL
+    if (!st %in% c("success", "error") || !length(waiting)) return()
+    cb <- waiting[[1]]; waiting <<- waiting[-1]
     res <- tryCatch(task$result(), error = function(e) NULL)
     cb(res)
   })
-  function(job, done) { done_cb <<- done; task$invoke(job) }
+  function(job, done) { waiting[[length(waiting) + 1]] <<- done; task$invoke(job) }
 }
 
 ai_runner_sync <- function(job, done) done(ai_run_job(job, transport = getOption("ponderis.ai_transport", ai_http_transport)))
@@ -63,8 +63,11 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   cancel <- reactiveVal(FALSE)
   progress <- reactiveVal("")
   runner <- NULL
+  run_id <- 0L   # a new run, or Discard, makes answers still on their way from an older run be ignored
   get_runner <- function() {
-    if (identical(getOption("ponderis.ai_runner"), "sync")) return(ai_runner_sync)
+    r <- getOption("ponderis.ai_runner")
+    if (identical(r, "sync")) return(ai_runner_sync)
+    if (is.function(r)) return(r)
     if (is.null(runner)) runner <<- ai_runner_mirai()
     runner
   }
@@ -88,7 +91,9 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     job <- jobs()[[i]]
     job$key <- ai$key(); job$model <- isolate(ai$model())
     progress(sprintf("Reading article %d of %d (%s)\u2026", i, length(jobs()), job$name))
+    my_run <- run_id
     get_runner()(job, function(r) {
+      if (my_run != run_id) return(invisible())
       if (is.null(r)) r <- list(ok = FALSE, error = "network", message = "The background worker stopped unexpectedly. Try again.")
       r$name <- job$name
       if (isTRUE(r$called) || is.null(r$called)) ai$record_usage(r$usage, job$model)
@@ -109,6 +114,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     jobs(lapply(seq_len(nrow(f)), function(i) list(path = f$datapath[i], name = f$name[i], type = type,
       outcome = input$ai_outcome %||% "", arms = input$ai_arms %||% "", notes = input$ai_notes %||% "")))
     results(vector("list", nrow(f)))
+    run_id <<- run_id + 1L
     cancel(FALSE); running(TRUE)
     run_queue(seq_len(nrow(f)))
   })
@@ -116,10 +122,14 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   observeEvent(input$ai_retry, {
     i <- suppressWarnings(as.integer(input$ai_retry))
     if (is.na(i) || i < 1 || i > length(jobs()) || isTRUE(running()) || !isolate(ai$ready())) return()
+    run_id <<- run_id + 1L
     cancel(FALSE); running(TRUE)
     run_queue(i)
   })
-  observeEvent(input$ai_discard, { results(list()); jobs(list()); progress("") })
+  observeEvent(input$ai_discard, {
+    run_id <<- run_id + 1L   # the PDF being read, if any, finishes in the background and its answer is dropped
+    results(list()); jobs(list()); progress(""); running(FALSE); cancel(FALSE)
+  })
 
   # all cells of the PDFs that answered, with the PDF they came from and a row number across PDFs
   cells <- reactive({

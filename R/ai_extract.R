@@ -96,9 +96,12 @@ ai_norm_text <- function(x, commas = TRUE) {
   for (l in names(AI_LIGATURES)) x <- gsub(l, AI_LIGATURES[[l]], x, fixed = TRUE)
   x <- gsub("[\u2010-\u2015\u2212\ufe63\uff0d]", "-", x)
   x <- gsub("[\u00a0\u2009\u202f]", " ", x)
+  x <- gsub("([0-9])\u00b7([0-9])", "\\1.\\2", x)                         # mid-dot decimal (Lancet style)
   if (commas) x <- gsub("([0-9]),([0-9])", "\\1.\\2", x)
   tolower(trimws(gsub("[[:space:]]+", " ", x)))
 }
+
+AI_NUM_RE <- "(-?)((?<![0-9])\\.[0-9]+|[0-9]+(?:\\.[0-9]+)?)"
 
 # Is the number `value` written in `quote`? Accepts 12 = 12.0, 1234 = 1,234 = 1 234, 0.5 = 0,5, a trailing %.
 ai_num_in <- function(value, quote) {
@@ -108,14 +111,14 @@ ai_num_in <- function(value, quote) {
   variants <- unique(c(gsub("([0-9])[, ]([0-9]{3})(?![0-9])", "\\1\\2", q, perl = TRUE),  # thousands separators
                        gsub("([0-9]),([0-9])", "\\1.\\2", q)))                             # decimal comma
   for (s in variants) {
-    m <- regmatches(s, gregexpr("(-?)([0-9]+(?:\\.[0-9]+)?)", s, perl = TRUE))[[1]]
+    m <- regmatches(s, gregexpr(AI_NUM_RE, s, perl = TRUE))[[1]]
     if (!length(m)) next
     neg <- startsWith(m, "-")
     num <- as.numeric(sub("^-", "", m))
     # a minus right after a digit is a range ("12-15"), not a sign
     if (any(abs(num - abs(v)) < 1e-9 & (v >= 0 | neg))) {
       if (v >= 0) return(TRUE)
-      pos <- gregexpr("(-?)([0-9]+(?:\\.[0-9]+)?)", s, perl = TRUE)[[1]]
+      pos <- gregexpr(AI_NUM_RE, s, perl = TRUE)[[1]]
       for (i in which(abs(num - abs(v)) < 1e-9 & neg))
         if (pos[i] == 1 || !grepl("[0-9]", substr(s, pos[i] - 1, pos[i] - 1))) return(TRUE)
     }
@@ -132,19 +135,36 @@ ai_verify <- function(cells, pages) {
   norm_pages <- ai_norm_text(pages)
   squash <- function(x) gsub(" ", "", x, fixed = TRUE)
   all_text <- paste(norm_pages, collapse = " ")
-  found <- function(q, page) {
+  # forms of a text compared: as normalized, without spaces, without spaces and hyphens
+  # (pdf_text splits and joins words in tables; "placebo-\ncontrolled" loses its hyphen when joined)
+  forms <- function(x) c(x, squash(x), gsub("-", "", squash(x), fixed = TRUE))
+  page_forms <- lapply(norm_pages, forms)
+  all_forms <- forms(all_text)
+  in_forms <- function(qf, tf) any(vapply(seq_along(qf), function(k) grepl(qf[k], tf[k], fixed = TRUE), logical(1)))
+  # where the quote is: the stated page (or next to it), another page, across a page break, or nowhere
+  locate <- function(q, page) {
     q <- ai_norm_text(q)
-    if (!nzchar(q)) return(FALSE)
-    near <- if (!is.na(page)) norm_pages[intersect(page + (-1:1), seq_along(norm_pages))] else character(0)
-    any(grepl(q, c(near, all_text), fixed = TRUE)) || grepl(squash(q), squash(all_text), fixed = TRUE)
+    if (!nzchar(q)) return(list(found = FALSE))
+    qf <- forms(q)
+    hits <- which(vapply(page_forms, function(tf) in_forms(qf, tf), logical(1)))
+    near <- if (is.na(page)) integer(0) else intersect(page + (-1:1), seq_along(norm_pages))
+    if (length(intersect(hits, near))) return(list(found = TRUE, page = page))
+    if (length(hits)) return(list(found = TRUE, page = hits[1], moved = TRUE))
+    list(found = in_forms(qf, all_forms), page = page)
   }
-  cells$status <- vapply(seq_len(nrow(cells)), function(i) {
+  for (i in seq_len(nrow(cells))) {
     v <- cells$value[i]
-    if (is.na(v) || !nzchar(trimws(v))) return("empty")
-    if (scanned) return("unverifiable")
-    if (!found(cells$quote[i], cells$page[i])) return("not_found")
-    if (cells$col[i] %in% AI_TEXT_COLS || ai_num_in(v, cells$quote[i])) "verified" else "quote_only"
-  }, "")
+    cells$status[i] <- if (is.na(v) || !nzchar(trimws(v))) "empty" else if (scanned) "unverifiable" else {
+      at <- locate(cells$quote[i], cells$page[i])
+      if (isTRUE(at$moved)) {
+        said <- if (is.na(cells$page[i])) "no page" else paste("page", cells$page[i])
+        cells$note[i] <- trimws(paste(cells$note[i], sprintf("The AI gave %s; the sentence is on page %d.", said, at$page)))
+        cells$page[i] <- as.integer(at$page)
+      }
+      if (!at$found) "not_found"
+      else if (cells$col[i] %in% AI_TEXT_COLS || ai_num_in(v, cells$quote[i])) "verified" else "quote_only"
+    }
+  }
   cells
 }
 

@@ -10,7 +10,7 @@ ai_button_ui <- function() {
               span(class = "ai-btn-label", "AI"), uiOutput("ai_badge", inline = TRUE))
 }
 
-ai_modal <- function(server_key, model) {
+ai_modal <- function(server_key, model, consent = FALSE) {
   modalDialog(title = "AI features", easyClose = TRUE, size = "m", footer = modalButton("Close"),
     uiOutput("ai_status"),
     if (server_key) div(class = "aside", "This server provides the API key, with a limit of AI calls per session.")
@@ -20,7 +20,7 @@ ai_modal <- function(server_key, model) {
           actionLink("ai_forget_key", "Forget my key")),
       div(class = "aside", "The key stays in this session only: it is not saved, logged or put in any file. Get one at console.anthropic.com.")),
     selectInput("ai_model", "Model", choices = AI_MODELS, selected = model, width = "100%"),
-    checkboxInput("ai_consent", AI_CONSENT, value = FALSE),
+    checkboxInput("ai_consent", AI_CONSENT, value = isTRUE(consent)),
     div(class = "aside", "The AI proposes; you check. Every number it extracts shows the page and the sentence it came from."),
     textOutput("ai_usage")
   )
@@ -34,7 +34,9 @@ ai_server <- function(input, output, session) {
   usage <- reactiveValues(calls = 0L, input = 0, output = 0, cost = 0)
   missing_pkgs <- ai_available()
 
-  observeEvent(input$ai_open, showModal(ai_modal(has_server_key, isolate(model()))))
+  # rebuilt each time it opens, with the choices already made (a fresh unticked box would withdraw consent)
+  panel <- function() ai_modal(has_server_key, isolate(model()), isolate(isTRUE(input$ai_consent)))
+  observeEvent(input$ai_open, showModal(panel()))
   observeEvent(input$ai_save_key, {
     k <- trimws(input$ai_key %||% "")
     if (nzchar(k)) user_key(k)
@@ -73,5 +75,5 @@ ai_server <- function(input, output, session) {
   output$ai_badge <- renderUI(span(class = paste("ai-dot", if (ready()) "on" else "off"), `aria-label` = if (ready()) "on" else "off"))
   outputOptions(output, "ai_badge", suspendWhenHidden = FALSE)
 
-  list(ready = ready, key = key, model = model, record_usage = record_usage, calls_left = calls_left, reason = reason)
+  list(ready = ready, key = key, model = model, record_usage = record_usage, calls_left = calls_left, reason = reason, panel = panel)
 }

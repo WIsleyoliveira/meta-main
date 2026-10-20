@@ -191,4 +191,14 @@ wc <- data.frame(study_id = "Sd 2017", mean_tx = "1", sd_tx = "0", n_tx = "10", 
 stopifnot(length(ai_check_rows(wc, "cont")) == 1, length(ai_check_rows(w1, "dich")) == 0)
 ok("consistency")
 
+# review fixes
+stopifnot(st_of("298", "a double-blind, placebo-controlled trial of 298 adults", "a double-\nblind, placebo-\ncontrolled trial of 298 adults") == "verified")
+ok("verify: compound words hyphenated at a line break")
+v <- ai_verify(cells1("12", "12 of 150", 1L), c("intro", "x", "y", "z", "w", "12 of 150 died"))
+stopifnot(v$status == "verified", v$page == 6L, grepl("page 1", v$note), grepl("page 6", v$note))
+ok("verify: page corrected when the quote is on another page")
+stopifnot(ai_num_in("0.35", "HR 0\u00b735"), !ai_num_in("3", "HR 3\u00b75"), ai_num_in("0.05", "p < .05"),
+          st_of("0.35", "HR 0\u00b735", "the hazard ratio was HR 0\u00b735") == "verified")
+ok("num formats: mid-dot decimal and leading point")
+
 cat("AI VERIFICATION TESTS PASSED\n")

@@ -231,7 +231,10 @@ Before launching publicly, decide on:
 - **Limits.** Uploads are capped at 32 MB (for PDFs sent to the AI) and CSVs at 2000 rows (`options(shiny.maxRequestSize)` in
   `app.R`, `MAX_ROWS` in `R/helpers.R`).
 - **AI.** To offer the AI with your own key, set `ANTHROPIC_API_KEY` (and optionally `PONDERIS_AI_MAX_CALLS`) in the server
-  environment, for example in `.Renviron`; you pay for all use. Otherwise leave it unset and users paste their own key.
+  environment, for example in `.Renviron`; you pay for all use. `PONDERIS_AI_MAX_CALLS` caps the calls of one browser
+  session, not of a user or of the server: reloading the page starts a new session with a fresh count, so it does not
+  bound your bill. Set a monthly spend limit for the key in the Anthropic Console as well.
+  Otherwise leave it unset and users paste their own key.
   The privacy note in the footer mentions that files sent to the AI are processed by Anthropic.
 - **Fonts.** The page loads Newsreader and Public Sans from Google Fonts. Without internet
   access it falls back to Georgia and a system sans-serif.

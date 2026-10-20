@@ -57,6 +57,10 @@ ai_runner_sync <- function(job, done) done(ai_run_job(job, transport = getOption
 
 ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   results <- reactiveVal(list())   # one entry per PDF of the current run, in upload order
+  # bumped when answers arrive or are cleared, not on a cell edit: the review and its table are drawn
+  # again only then, and an edit replaces the table's data in place (scroll and selection stay)
+  table_rev <- reactiveVal(0L)
+  new_results <- function(rs) { results(rs); table_rev(isolate(table_rev()) + 1L) }
   jobs <- reactiveVal(list())
   run_type <- reactiveVal("dich")
   running <- reactiveVal(FALSE)
@@ -72,7 +76,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     runner
   }
 
-  set_result <- function(i, r) { rs <- results(); rs[[i]] <- r; results(rs) }
+  set_result <- function(i, r) { rs <- results(); rs[[i]] <- r; new_results(rs) }
 
   run_queue <- function(queue) {
     if (!length(queue)) {
@@ -113,7 +117,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     type <- pick(input$type, names(SPEC)); run_type(type)
     jobs(lapply(seq_len(nrow(f)), function(i) list(path = f$datapath[i], name = f$name[i], type = type,
       outcome = input$ai_outcome %||% "", arms = input$ai_arms %||% "", notes = input$ai_notes %||% "")))
-    results(vector("list", nrow(f)))
+    new_results(vector("list", nrow(f)))
     run_id <<- run_id + 1L
     cancel(FALSE); running(TRUE)
     run_queue(seq_len(nrow(f)))
@@ -128,7 +132,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   })
   observeEvent(input$ai_discard, {
     run_id <<- run_id + 1L   # the PDF being read, if any, finishes in the background and its answer is dropped
-    results(list()); jobs(list()); progress(""); running(FALSE); cancel(FALSE)
+    new_results(list()); jobs(list()); progress(""); running(FALSE); cancel(FALSE)
   })
 
   # all cells of the PDFs that answered, with the PDF they came from and a row number across PDFs
@@ -186,13 +190,19 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     tagList(lapply(msgs, function(m) div(class = "notice warn", m)))
   })
 
-  output$ai_table <- DT::renderDT({
-    w <- table(); d <- cells(); req(nrow(w) > 0)
-    cols <- template_cols(run_type())
+  # the table as shown: the values, then one hidden status column per value (it sets the cell colour)
+  shown <- reactive({
+    w <- table(); d <- cells(); cols <- template_cols(run_type())
     st <- as.data.frame(lapply(cols, function(k) vapply(seq_len(nrow(w)), function(g) d$status[d$gi == g & d$col == k][1], "")),
                         col.names = paste0(cols, "__st"), stringsAsFactors = FALSE)
-    show <- cbind(w, st)
-    labels <- c("PDF", "Study", unname(SPEC[[run_type()]]$cols), "Year", "Subgroup", paste0(cols, "__st"))
+    cbind(w, st)
+  })
+  output$ai_table <- DT::renderDT({
+    table_rev()
+    w <- isolate(table()); req(nrow(w) > 0)
+    cols <- template_cols(isolate(run_type()))
+    show <- isolate(shown())
+    labels <- c("PDF", "Study", unname(SPEC[[isolate(run_type())]]$cols), "Year", "Subgroup", paste0(cols, "__st"))
     dt <- DT::datatable(show, rownames = FALSE, colnames = labels, escape = TRUE,
                         editable = list(target = "cell", disable = list(columns = 0)),
                         selection = list(mode = "single", target = "cell"),
@@ -202,6 +212,8 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
                                           backgroundColor = DT::styleEqual(names(AI_STATUS_BG), unname(AI_STATUS_BG)))
     dt
   })
+
+  table_proxy <- DT::dataTableProxy("ai_table", session)
 
   # the cell under the cursor: (global row, column name), or NULL
   cell_at <- function(r, j0) {
@@ -219,6 +231,7 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
     cl$value[k] <- if (nzchar(v)) v else NA_character_
     cl$status[k] <- "edited"
     rs[[hit$pdf_i]]$cells <- cl; results(rs)
+    DT::replaceData(table_proxy, isolate(shown()), resetPaging = FALSE, clearSelection = "none", rownames = FALSE)
   })
   output$ai_evidence <- renderUI({
     s <- input$ai_table_cells_selected
@@ -248,8 +261,9 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   output$ai_dl_csv <- downloadHandler("ai_extracted.csv", function(file) utils::write.csv(rows_for_forest(), file, row.names = FALSE, na = ""))
 
   output$ai_review <- renderUI({
-    if (!length(results())) return(NULL)
-    has_rows <- nrow(table()) > 0
+    table_rev()
+    if (!length(isolate(results()))) return(NULL)
+    has_rows <- nrow(isolate(table())) > 0
     div(class = "ai-review",
       h3("Data extracted with AI: review before use"),
       div(class = "ai-legend", lapply(c("verified", "quote_only", "not_found", "unverifiable", "edited"), function(s)

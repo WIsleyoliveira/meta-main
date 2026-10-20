@@ -220,4 +220,22 @@ run_btn <- regmatches(u <- as.character(ai_extract_ui()), regexpr('<button[^>]*i
 stopifnot(length(run_btn) == 1, grepl(" disabled", run_btn))
 ok("extract button starts disabled")
 
+options(ponderis.ai_transport = seq_transport("ok_dich.json"))
+testServer(app, {
+  # a cell edit replaces the table's data in the browser instead of drawing the table again (scroll and selection stay)
+  reg <- 0L; msgs <- list()
+  session$registerDataObj <- function(name, data, filterFunc) { reg <<- reg + 1L; "data-url" }
+  session$sendCustomMessage <- function(type, message) msgs[[length(msgs) + 1]] <<- list(type = type, message = message)
+  forest_inputs(session); ready_ai(session)
+  session$setInputs(ai_pdfs = pdfs(1), ai_run = 1)
+  invisible(output$ai_table); n0 <- reg
+  session$setInputs(ai_table_cells_selected = matrix(c(1, 3), ncol = 2))
+  session$setInputs(ai_table_cell_edit = data.frame(row = 1, col = 3, value = "151"))
+  session$flushReact()
+  reload <- Filter(function(m) identical(m$type, "datatable-calls") && identical(m$message$call$method, "reloadData"), msgs)
+  stopifnot(ai_x$table()$n_tx[1] == "151", length(reload) == 1, isFALSE(reload[[1]]$message$call$args[[1]]),
+            identical(reload[[1]]$message$call$args[[2]], "none"), reg == n0 + 1L)
+  ok("cell edit keeps the table (replaceData)")
+})
+
 cat("AI EXTRACTION TESTS PASSED\n")

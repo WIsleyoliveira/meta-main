@@ -141,3 +141,54 @@ stopifnot(ct[[1]]$type == "document", ct[[2]]$type == "text", grepl("30-day mort
 ok("request carries PDF and outcome")
 
 cat("AI EXTRACTION PARSING TESTS PASSED\n")
+
+# ==================== extraction: local verification ====================
+cells1 <- function(value, quote, page = 1L, col = "events_tx") data.frame(row = 1L, col = col, value = value, page = page,
+  quote = quote, note = "", status = NA_character_, stringsAsFactors = FALSE)
+st_of <- function(value, quote, pages, page = 1L, col = "events_tx") ai_verify(cells1(value, quote, page, col), pages)$status
+
+stopifnot(st_of("12", "mortality was 12/150", "Overall mortal-\nity was 12/150 at day 30") == "verified")
+ok("verify hyphenation")
+stopifnot(st_of("0.85", "significant 0.85", "a signiﬁcant 0,85 reduction") == "verified")
+ok("verify ligature")
+stopifnot(st_of("-1.2", "MD -1.2", "pooled MD −1.2 points") == "verified")
+ok("verify minus")
+stopifnot(st_of("12", "12 of 150", c("intro", "methods", "12 of 150 died"), page = 2L) == "verified")
+ok("verify adjacent page")
+stopifnot(st_of("12", "12 of 150", c("12 of 150 died", "x", "y", "z"), page = 4L) == "verified")
+ok("verify quote on another page")
+stopifnot(st_of("13", "12 of 150", "12 of 150 died") == "quote_only")
+ok("verify value missing")
+stopifnot(st_of("12", "15 of 150", "12 of 150 died") == "not_found", st_of("12", "", "12 of 150 died") == "not_found")
+ok("verify not found")
+stopifnot(st_of("12", "12 of 150", c("", "  \n ")) == "unverifiable", st_of(NA_character_, "", c("", "")) == "empty")
+ok("verify scanned")
+stopifnot(st_of(NA_character_, "", "12 of 150") == "empty")
+ok("verify empty")
+stopifnot(st_of("150", "Deaths 12 150", "Table 2\nDeaths     12\n     150\n") == "verified")
+ok("verify: table cells across lines")
+stopifnot(st_of("Smith 2019", "Smith et al. randomized", "Smith et al. randomized 300 patients", col = "study_id") == "verified")
+ok("verify text cell needs only the quote")
+
+stopifnot(ai_num_in("1234", "n = 1,234"), ai_num_in("12", "12.0%"), ai_num_in("0.5", "0,5"), ai_num_in("-1.2", "md -1.2"),
+          !ai_num_in("12", "112"), !ai_num_in("12", "1.2"), !ai_num_in("-15", "12-15 days"), ai_num_in("15", "12-15 days"))
+ok("num formats")
+
+pdf2 <- tempfile(fileext = ".pdf"); grDevices::pdf(pdf2); plot.new(); text(0.5, 0.5, "Events 12 of 150 in the treatment arm"); grDevices::dev.off()
+stopifnot(ai_verify(cells1("12", "Events 12 of 150", 1L), pdftools::pdf_text(pdf2))$status == "verified")
+ok("real pdf")
+
+w1 <- ai_cells_wide(r1 <- ai_extract_one(pdf1, "trialz.pdf", "dich", "", "", "", key, "claude-opus-5-5", transport = fake(200, fx("ok_dich.json")))$cells, "dich")
+stopifnot(identical(names(w1), template_cols("dich")), nrow(w1) == 2, w1$events_tx[1] == "12", w1$study_id[2] == "Trial Z 2021 (elderly)")
+ok("cells wide")
+
+wd <- data.frame(study_id = "Bad 2020", events_tx = "200", n_tx = "150", events_ctrl = "5", n_ctrl = "100", year = NA, subgroup = NA)
+wn <- ai_check_rows(wd, "dich")
+stopifnot(length(wn) == 1, grepl("Bad 2020", wn))
+wg <- data.frame(study_id = "Odd 2018", effect = "2", ci_lower = "0.5", ci_upper = "1.5", se = NA, year = NA, subgroup = NA)
+stopifnot(length(ai_check_rows(wg, "gen")) == 1)
+wc <- data.frame(study_id = "Sd 2017", mean_tx = "1", sd_tx = "0", n_tx = "10", mean_ctrl = "2", sd_ctrl = "1", n_ctrl = "10", year = NA, subgroup = NA)
+stopifnot(length(ai_check_rows(wc, "cont")) == 1, length(ai_check_rows(w1, "dich")) == 0)
+ok("consistency")
+
+cat("AI VERIFICATION TESTS PASSED\n")

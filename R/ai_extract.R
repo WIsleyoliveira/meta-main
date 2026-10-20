@@ -82,3 +82,99 @@ ai_extract_one <- function(path, name, type, outcome, arms, notes, key, model, t
   list(ok = TRUE, name = name, cells = ai_cells_long(r$data$studies, type),
        ambiguities = vapply(r$data$ambiguities, as.character, ""), usage = r$usage, error = NULL, message = NULL)
 }
+
+# ---- Local check of quotes and numbers against the PDF text ----
+
+AI_LIGATURES <- c("ﬀ" = "ff", "ﬁ" = "fi", "ﬂ" = "fl", "ﬃ" = "ffi", "ﬄ" = "ffl", "ﬅ" = "st", "ﬆ" = "st")
+
+# Text as it is compared: line-break hyphenation joined, ligatures spelled out, every dash and minus
+# written "-", whitespace collapsed, lower case; with commas = TRUE a comma between digits becomes a point.
+ai_norm_text <- function(x, commas = TRUE) {
+  x <- enc2utf8(as.character(x))
+  x <- gsub("­", "", x, fixed = TRUE)                                  # soft hyphen
+  x <- gsub("([[:alpha:]])-[ \t]*\r?\n[ \t]*([[:lower:]])", "\\1\\2", x)    # mortal-\nity
+  for (l in names(AI_LIGATURES)) x <- gsub(l, AI_LIGATURES[[l]], x, fixed = TRUE)
+  x <- gsub("[‐-―−﹣－]", "-", x)
+  x <- gsub("[   ]", " ", x)
+  if (commas) x <- gsub("([0-9]),([0-9])", "\\1.\\2", x)
+  tolower(trimws(gsub("[[:space:]]+", " ", x)))
+}
+
+# Is the number `value` written in `quote`? Accepts 12 = 12.0, 1234 = 1,234 = 1 234, 0.5 = 0,5, a trailing %.
+ai_num_in <- function(value, quote) {
+  v <- suppressWarnings(as.numeric(value))
+  if (is.na(v)) return(FALSE)
+  q <- ai_norm_text(quote, commas = FALSE)
+  variants <- unique(c(gsub("([0-9])[, ]([0-9]{3})(?![0-9])", "\\1\\2", q, perl = TRUE),  # thousands separators
+                       gsub("([0-9]),([0-9])", "\\1.\\2", q)))                             # decimal comma
+  for (s in variants) {
+    m <- regmatches(s, gregexpr("(-?)([0-9]+(?:\\.[0-9]+)?)", s, perl = TRUE))[[1]]
+    if (!length(m)) next
+    neg <- startsWith(m, "-")
+    num <- as.numeric(sub("^-", "", m))
+    # a minus right after a digit is a range ("12-15"), not a sign
+    if (any(abs(num - abs(v)) < 1e-9 & (v >= 0 | neg))) {
+      if (v >= 0) return(TRUE)
+      pos <- gregexpr("(-?)([0-9]+(?:\\.[0-9]+)?)", s, perl = TRUE)[[1]]
+      for (i in which(abs(num - abs(v)) < 1e-9 & neg))
+        if (pos[i] == 1 || !grepl("[0-9]", substr(s, pos[i] - 1, pos[i] - 1))) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+AI_TEXT_COLS <- c("study_id", "subgroup")
+
+# Sets cells$status: empty, unverifiable (no text in the PDF), verified, quote_only, not_found.
+ai_verify <- function(cells, pages) {
+  if (!nrow(cells)) return(cells)
+  scanned <- !any(nzchar(trimws(pages)))
+  norm_pages <- ai_norm_text(pages)
+  squash <- function(x) gsub(" ", "", x, fixed = TRUE)
+  all_text <- paste(norm_pages, collapse = " ")
+  found <- function(q, page) {
+    q <- ai_norm_text(q)
+    if (!nzchar(q)) return(FALSE)
+    near <- if (!is.na(page)) norm_pages[intersect(page + (-1:1), seq_along(norm_pages))] else character(0)
+    any(grepl(q, c(near, all_text), fixed = TRUE)) || grepl(squash(q), squash(all_text), fixed = TRUE)
+  }
+  cells$status <- vapply(seq_len(nrow(cells)), function(i) {
+    v <- cells$value[i]
+    if (is.na(v) || !nzchar(trimws(v))) return("empty")
+    if (scanned) return("unverifiable")
+    if (!found(cells$quote[i], cells$page[i])) return("not_found")
+    if (cells$col[i] %in% AI_TEXT_COLS || ai_num_in(v, cells$quote[i])) "verified" else "quote_only"
+  }, "")
+  cells
+}
+
+ai_cells_wide <- function(cells, type) {
+  cols <- template_cols(type)
+  rows <- sort(unique(cells$row))
+  d <- as.data.frame(setNames(rep(list(rep(NA_character_, length(rows))), length(cols)), cols), stringsAsFactors = FALSE)
+  for (j in seq_along(rows)) {
+    cj <- cells[cells$row == rows[j], , drop = FALSE]
+    d[j, cj$col] <- cj$value
+  }
+  d
+}
+
+# Plain arithmetic checks on the extracted rows; one warning per problem, naming the study.
+ai_check_rows <- function(wide, type) {
+  n <- function(x) suppressWarnings(as.numeric(x))
+  out <- character(0)
+  for (i in seq_len(nrow(wide))) {
+    r <- wide[i, , drop = FALSE]; s <- as.character(r$study_id %||% paste("Row", i)); if (is.na(s)) s <- paste("Row", i)
+    add <- function(msg) out <<- c(out, paste0(s, ": ", msg))
+    over <- function(e, t, arm) if (!is.na(n(r[[e]])) && !is.na(n(r[[t]])) && n(r[[e]]) > n(r[[t]]))
+      add(sprintf("events (%s) are more than the total (%s)%s.", r[[e]], r[[t]], arm))
+    if (type == "dich") { over("events_tx", "n_tx", " in the treatment arm"); over("events_ctrl", "n_ctrl", " in the control arm") }
+    if (type == "prop") over("events", "n", "")
+    if (type == "cont") for (k in c("sd_tx", "sd_ctrl")) if (!is.na(n(r[[k]])) && n(r[[k]]) <= 0) add(sprintf("%s is %s; a standard deviation must be above 0.", k, r[[k]]))
+    if (type == "gen") {
+      e <- n(r$effect); lo <- n(r$ci_lower); hi <- n(r$ci_upper)
+      if (!any(is.na(c(e, lo, hi))) && (e < min(lo, hi) || e > max(lo, hi))) add(sprintf("the estimate %s is outside its confidence interval (%s to %s).", r$effect, r$ci_lower, r$ci_upper))
+    }
+  }
+  out
+}

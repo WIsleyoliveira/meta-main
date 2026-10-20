@@ -129,9 +129,9 @@ ai_num_in <- function(value, quote) {
 AI_TEXT_COLS <- c("study_id", "subgroup")
 
 # Sets cells$status: empty, unverifiable (no text in the PDF), verified, quote_only, not_found.
-ai_verify <- function(cells, pages) {
-  if (!nrow(cells)) return(cells)
-  scanned <- !any(nzchar(trimws(pages)))
+# Where a quote is in the PDF text, as a function(quote, page) -> list(found, page, moved).
+# Found on the stated page or next to it: page kept; on another page: that page, moved = TRUE; across a page break: page kept.
+ai_quote_locator <- function(pages) {
   norm_pages <- ai_norm_text(pages)
   squash <- function(x) gsub(" ", "", x, fixed = TRUE)
   all_text <- paste(norm_pages, collapse = " ")
@@ -141,8 +141,7 @@ ai_verify <- function(cells, pages) {
   page_forms <- lapply(norm_pages, forms)
   all_forms <- forms(all_text)
   in_forms <- function(qf, tf) any(vapply(seq_along(qf), function(k) grepl(qf[k], tf[k], fixed = TRUE), logical(1)))
-  # where the quote is: the stated page (or next to it), another page, across a page break, or nowhere
-  locate <- function(q, page) {
+  function(q, page) {
     q <- ai_norm_text(q)
     if (!nzchar(q)) return(list(found = FALSE))
     qf <- forms(q)
@@ -152,6 +151,14 @@ ai_verify <- function(cells, pages) {
     if (length(hits)) return(list(found = TRUE, page = hits[1], moved = TRUE))
     list(found = in_forms(qf, all_forms), page = page)
   }
+}
+
+ai_scanned <- function(pages) !any(nzchar(trimws(pages)))
+
+ai_verify <- function(cells, pages) {
+  if (!nrow(cells)) return(cells)
+  scanned <- ai_scanned(pages)
+  locate <- ai_quote_locator(pages)
   for (i in seq_len(nrow(cells))) {
     v <- cells$value[i]
     cells$status[i] <- if (is.na(v) || !nzchar(trimws(v))) "empty" else if (scanned) "unverifiable" else {

@@ -149,3 +149,18 @@ robins2_domains <- function(answers) {
 # (Several Moderate -> Serious, several Serious -> Critical are the reviewer's additive judgement, shown as a note.)
 robins2_overall <- function(judgements, critical_prelim = FALSE)
   if (isTRUE(critical_prelim)) "Critical" else rob_worst(judgements, ROBINS2_LEVELS)
+
+# The bank of a tool and variant, and the judgements from a set of answers (already checked or not).
+rob_bank <- function(tool, variant) if (tool == "rob2") ROB2_Q[[variant]] else ROBINS2_Q[[variant]]
+
+rob_judge <- function(tool, variant, answers, deviations = character(0)) {
+  eff <- rob_force_na(rob_bank(tool, variant), answers, deviations)
+  if (tool == "rob2") {
+    d <- rob2_domains(eff, variant)
+    list(answers = eff, domains = d, overall = rob2_overall(d), critical_prelim = FALSE)
+  } else {
+    d <- setNames(vapply(1:6, function(k) robins2_domain(k, eff, variant), ""), paste0("D", 1:6))
+    crit <- robins2_prelim_critical(eff)
+    list(answers = eff, domains = d, overall = robins2_overall(d, crit), critical_prelim = crit)
+  }
+}

@@ -221,7 +221,8 @@ server <- function(input, output, session) {
   raw <- reactiveVal(NULL)
   detect_msg <- reactiveVal("")
   ai <- ai_server(input, output, session)
-  ai_x <- ai_extract_server(input, output, session, ai, raw, detect_msg)
+  ai_lib <- ai_library_server(input, output, session)
+  ai_x <- ai_extract_server(input, output, session, ai, raw, detect_msg, library = ai_lib)
 
   km_server(input, output, session, forest_raw = raw, forest_note = detect_msg)
   conv_server(input, output, session, forest_raw = raw, forest_note = detect_msg)

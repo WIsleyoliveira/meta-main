@@ -55,7 +55,7 @@ ai_runner_mirai <- function() {
 
 ai_runner_sync <- function(job, done) done(ai_run_job(job, transport = getOption("ponderis.ai_transport", ai_http_transport)))
 
-ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
+ai_extract_server <- function(input, output, session, ai, raw, detect_msg, library = NULL) {
   results <- reactiveVal(list())   # one entry per PDF of the current run, in upload order
   # bumped when answers arrive or are cleared, not on a cell edit: the review and its table are drawn
   # again only then, and an edit replaces the table's data in place (scroll and selection stay)
@@ -101,6 +101,11 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
       if (is.null(r)) r <- list(ok = FALSE, error = "network", message = "The background worker stopped unexpectedly. Try again.")
       r$name <- job$name
       if (isTRUE(r$called) || is.null(r$called)) ai$record_usage(r$usage, job$model)
+      # a PDF that gave exactly one study is linked to it in the library (the risk-of-bias assistant uses the link)
+      if (!is.null(library) && !is.null(job$lib_id) && isTRUE(r$ok) && length(unique(r$cells$row)) == 1) {
+        sid <- r$cells$value[r$cells$col == "study_id"][1]
+        if (!is.na(sid)) library$set_study(job$lib_id, sid)
+      }
       set_result(i, r)
       run_queue(rest)
     })
@@ -115,7 +120,8 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
       f <- f[seq_len(AI_MAX_PDFS), , drop = FALSE]
     }
     type <- pick(input$type, names(SPEC)); run_type(type)
-    jobs(lapply(seq_len(nrow(f)), function(i) list(path = f$datapath[i], name = f$name[i], type = type,
+    lib_ids <- if (!is.null(library)) library$add(f) else rep(NA_character_, nrow(f))
+    jobs(lapply(seq_len(nrow(f)), function(i) list(path = f$datapath[i], name = f$name[i], type = type, lib_id = lib_ids[i],
       outcome = input$ai_outcome %||% "", arms = input$ai_arms %||% "", notes = input$ai_notes %||% "")))
     new_results(vector("list", nrow(f)))
     run_id <<- run_id + 1L

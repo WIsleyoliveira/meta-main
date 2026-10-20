@@ -238,4 +238,22 @@ testServer(app, {
   ok("cell edit keeps the table (replaceData)")
 })
 
+# session PDF library (shared with the risk-of-bias assistant)
+tr <- seq_transport("ok_dich.json", "ok_one.json")
+options(ponderis.ai_transport = tr)
+testServer(app, {
+  forest_inputs(session); ready_ai(session)
+  up <- pdfs(2)
+  session$setInputs(ai_pdfs = up, ai_run = 1)
+  e <- ai_lib$entries()
+  stopifnot(length(e) == 2, identical(vapply(e, `[[`, "", "name"), c("article1.pdf", "article2.pdf")),
+            is.na(e[[1]]$study), e[[2]]$study == "Trial Z 2021", file.exists(e[[1]]$path), e[[1]]$path != up$datapath[1],
+            any(grepl("Article 1", e[[1]]$pages)))
+  ids <- ai_lib$add(up[1, ])
+  stopifnot(length(ai_lib$entries()) == 2, ids == e[[1]]$id)
+  ai_lib$set_study(e[[1]]$id, "Smith 2019")
+  stopifnot(ai_lib$get(e[[1]]$id)$study == "Smith 2019", is.null(ai_lib$get("nope")))
+  ok("session PDF library")
+})
+
 cat("AI EXTRACTION TESTS PASSED\n")

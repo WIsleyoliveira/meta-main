@@ -145,6 +145,10 @@ R/km_helpers.R        Kaplan-Meier: file rules, validation, analysis code, plot 
 R/km_extra.R          Kaplan-Meier: arm summaries, non-proportional hazards, sensitivity analyses
 R/km_report.R         written Methods and Results (Kaplan-Meier mode) and the Results paragraph (forest plot mode)
 R/km_module.R         Kaplan-Meier interface and server logic
+R/ai_client.R         AI: Claude API client (structured JSON answers, errors, cost)
+R/ai_extract.R        AI: extraction schema and prompt, local check of quotes and numbers
+R/ai_module.R         AI: panel with key, consent, model and usage
+R/ai_extract_module.R AI: PDF upload, background runs, review table, hand-off to the forest plot
 www/style.css         look and feel
 install_packages.R    one-time package install
 tests/                headless tests (see below)
@@ -163,6 +167,31 @@ and run `node tests/validation/val_digitizer.js` first (needs Playwright; option
 
 Further tests: `tests/test_extra.R` (meta-regression and influence), `tests/test_review.R` (PRISMA, risk of bias, GRADE) and `tests/test_review_browser.js` (the new screens in the browser).
 
+## AI features (optional): extract data from PDFs
+
+In Forest plot, step 2 has **Extract the data from PDFs with AI**. Upload the articles (one PDF per study, up to 20),
+type the outcome (and, if useful, the arms and instructions such as "use intention-to-treat"), and press **Extract with AI**.
+Claude (Anthropic) reads each article and returns one row per study with the template columns.
+
+- **The AI proposes, you confirm.** The rows appear in a review table; nothing enters the analysis until you press **Use these rows**.
+- **Every number has its source.** Click a cell to see the page and the sentence it came from.
+- **Checked locally.** The app looks for that sentence in the text of the PDF (with `pdftools`) and colours the cell:
+  green (sentence and number found), yellow (sentence found, number not in it), red (sentence not found), grey (scanned PDF, no text to check), blue (edited by you).
+  Choices the AI made (time points, ITT or per-protocol) are listed above the table, and simple inconsistencies (events above the total, SD of 0, estimate outside its CI, the same study in two PDFs) are flagged.
+- **No code from the AI.** It returns data in a fixed JSON schema; the rows then go through the same checks as an uploaded CSV, and the exported R script is unchanged.
+- **Privacy.** The AI buttons stay off until you agree, in the **AI** panel (top right), that the files you send go to Anthropic. Without AI nothing leaves your session.
+- When the data came from the AI, the Methods paragraph adds a sentence saying so. Check every row against the articles before publishing.
+
+**Key.** Either the server sets `ANTHROPIC_API_KEY` (users then need nothing, and each session may make at most
+`PONDERIS_AI_MAX_CALLS` calls, 30 by default), or each person pastes their own key in the AI panel; it stays in the session
+only (never saved, logged, or written to a project or script). Models: Claude Opus 5.5 (default, most accurate) or Claude Sonnet 5.5 (cheaper).
+The panel shows the tokens used and an estimated cost; a typical article costs a few cents.
+
+Needs the R packages `httr2`, `jsonlite`, `mirai`, `promises` and `pdftools` (`install_packages.R` installs them).
+Without them, or without a key, the app works as before and the AI block says what is missing.
+Code: `R/ai_client.R` (API client), `R/ai_extract.R` (schema, prompt, local check), `R/ai_module.R` (AI panel),
+`R/ai_extract_module.R` (upload, background runs, review table).
+
 ## Navigation
 
 Five entries in the top bar, grouped by what you are doing: Meta-analysis (forest plot, bias, regression), Survival curves step 1 (digitize and compare curves) and step 2 (pooled Kaplan-Meier analysis), Review tools, and the median/IQR calculator. In the digitizer the right side has two tabs: Figure (stays in view while you use the controls on the left) and Saved curves and comparisons.
@@ -177,6 +206,9 @@ Rscript tests/test_km_engine.R # Kaplan-Meier engine: accuracy against simulated
 Rscript tests/test_km_extra.R  # non-proportional hazards and sensitivity code against a simulation with known truth
 Rscript tests/test_km_app.R   # Kaplan-Meier mode in the Shiny server, including send-to-forest
 Rscript tests/test_compare.R  # comparisons built from the saved digitizer library, pooled sides, warnings
+Rscript tests/test_ai.R       # AI client, schema, parsing and local verification (fake API: no network, no cost)
+Rscript tests/test_ai_app.R   # AI panel and PDF extraction in the Shiny server (fake API)
+Rscript tests/test_ai_live.R  # one real API call; runs only with PONDERIS_AI_LIVE=1 and ANTHROPIC_API_KEY set
 ```
 
 Run them from this folder.
@@ -196,8 +228,11 @@ Before launching publicly, decide on:
 - **Privacy text.** The app does not store uploads (they live in the user's session and
   are deleted when it ends), and the footer says so. Keep that true on your host: do not
   enable request logging of uploaded files.
-- **Limits.** Uploads are capped at 5 MB and 2000 rows (`options(shiny.maxRequestSize)` in
+- **Limits.** Uploads are capped at 32 MB (for PDFs sent to the AI) and CSVs at 2000 rows (`options(shiny.maxRequestSize)` in
   `app.R`, `MAX_ROWS` in `R/helpers.R`).
+- **AI.** To offer the AI with your own key, set `ANTHROPIC_API_KEY` (and optionally `PONDERIS_AI_MAX_CALLS`) in the server
+  environment, for example in `.Renviron`; you pay for all use. Otherwise leave it unset and users paste their own key.
+  The privacy note in the footer mentions that files sent to the AI are processed by Anthropic.
 - **Fonts.** The page loads Newsreader and Public Sans from Google Fonts. Without internet
   access it falls back to Georgia and a system sans-serif.
 

@@ -7,7 +7,7 @@ library(bslib)
 library(DT)
 library(meta)
 
-options(shiny.maxRequestSize = 5 * 1024^2)  # 5 MB upload limit
+options(shiny.maxRequestSize = 32 * 1024^2)  # 32 MB upload limit (PDFs for the AI; CSVs are capped by MAX_ROWS)
 
 app_theme <- bs_theme(
   version = 5, bg = "#ECEFF2", fg = "#0F1B27", primary = "#1E3A5F",
@@ -40,7 +40,8 @@ ui <- fluidPage(
           HTML('<i class="tt" data-tip="Digitize curves from published figures, then pool them into one Kaplan-Meier analysis.">Survival curves</i>'),
           HTML('<i class="tt" data-tip="PRISMA flow diagram, risk of bias (RoB 2, ROBINS-I, NOS) and GRADE certainty of evidence.">Quality &amp; reporting</i>'),
           HTML('<i class="tt" data-tip="Convert median and IQR to mean and SD, SE or CI to SD, and combine groups.">Calculator</i>'),
-          HTML('km'))))
+          HTML('km')))),
+    ai_button_ui()
   ),
 
   # steps inside "Survival curves"
@@ -207,7 +208,8 @@ ui <- fluidPage(
   )),
 
   tags$footer(class = "colophon",
-    "Forest plots run with the R package meta; Kaplan-Meier curves are rebuilt with IPDfromKM (Guyot et al. 2012). Uploaded files are processed in your session and are not stored.")
+    "Forest plots run with the R package meta; Kaplan-Meier curves are rebuilt with IPDfromKM (Guyot et al. 2012). Uploaded files are processed in your session and are not stored.",
+    " If you use the AI features, the files you send are processed by Anthropic.")
 )
 
 # --------------------------------------------------------------------------
@@ -216,6 +218,7 @@ server <- function(input, output, session) {
 
   raw <- reactiveVal(NULL)
   detect_msg <- reactiveVal("")
+  ai <- ai_server(input, output, session)
 
   km_server(input, output, session, forest_raw = raw, forest_note = detect_msg)
   conv_server(input, output, session, forest_raw = raw, forest_note = detect_msg)

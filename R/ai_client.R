@@ -39,7 +39,8 @@ ai_http_transport <- function(body, key) {
                        `anthropic-beta` = "server-side-fallback-2026-07-01", .redact = "x-api-key") |>
     httr2::req_body_raw(json, type = "application/json") |>
     httr2::req_timeout(300) |>
-    httr2::req_retry(max_tries = 3, is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 529)) |>
+    httr2::req_retry(max_tries = 3, retry_on_failure = TRUE,
+                     is_transient = function(resp) httr2::resp_status(resp) %in% c(429, 500, 502, 503, 504, 529)) |>
     httr2::req_error(is_error = function(resp) FALSE)
   resp <- tryCatch(httr2::req_perform(req), error = function(e) NULL)
   if (is.null(resp)) return(list(status = 0L, body_text = ""))

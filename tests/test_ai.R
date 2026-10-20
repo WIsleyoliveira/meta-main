@@ -77,6 +77,11 @@ stopifnot(isTRUE(r$ok), seen$url == "https://api.anthropic.com/v1/messages",
           sent$model == "claude-sonnet-5-5", sent$fallbacks == "default", sent$messages[[1]]$content[[1]]$text == "hi",
           sent$output_config$format$type == "json_schema")
 ok("http transport: url, headers, json body")
+pol <- seen$policies
+stopifnot(isTRUE(pol$retry_on_failure), pol$retry_max_tries == 3,
+          all(vapply(c(429, 500, 502, 503, 504, 529), function(s) pol$retry_is_transient(httr2::response(s)), logical(1))),
+          !pol$retry_is_transient(httr2::response(400)))
+ok("http transport: retries connection failures and 429/5xx")
 
 httr2::local_mocked_responses(function(req) httr2::response(401))
 r <- ai_call(key, "claude-opus-5-5", "sys", list(), list())

@@ -149,6 +149,11 @@ R/ai_client.R         AI: Claude API client (structured JSON answers, errors, co
 R/ai_extract.R        AI: extraction schema and prompt, local check of quotes and numbers
 R/ai_module.R         AI: panel with key, consent, model and usage
 R/ai_extract_module.R AI: PDF upload, background runs, review table, hand-off to the forest plot
+R/ai_library.R        AI: session PDF library shared by the AI features
+R/rob_questions.R     risk of bias: RoB 2 and ROBINS-I V2 signalling questions (verbatim) and when each applies
+R/rob_algorithms.R    risk of bias: the tools' algorithms from answers to judgements
+R/ai_rob.R            AI: risk-of-bias request, parsing and quote check
+R/ai_rob_module.R     AI: "Assess with AI" in the Risk of bias tab (review cards, overrides, apply, exports)
 www/style.css         look and feel
 install_packages.R    one-time package install
 tests/                headless tests (see below)
@@ -192,6 +197,26 @@ Without them, or without a key, the app works as before and the AI block says wh
 Code: `R/ai_client.R` (API client), `R/ai_extract.R` (schema, prompt, local check), `R/ai_module.R` (AI panel),
 `R/ai_extract_module.R` (upload, background runs, review table).
 
+## AI risk-of-bias assistant (optional)
+
+In Quality & reporting → Risk of bias, choose **RoB 2** or **ROBINS-I V2**, list the studies, and use **Assess with AI**:
+give the outcome (and the result, the effect of interest for RoB 2, or the confounding factors for ROBINS-I), link each study
+to its PDF (PDFs sent in the forest-plot extraction are already there), and press **Assess with AI**.
+
+- The AI answers every **signalling question** of the tool (Yes, Probably yes, Probably no, No, No information; ROBINS-I also Weak/Strong yes and no),
+  each with the page, the sentence from the report and a one-line rationale. The app checks the sentence against the PDF.
+- The **judgements come from the tools' algorithms**, written in R (`R/rob_algorithms.R`), not from the AI: RoB 2 from Tables 4-14 of the
+  RoB 2 guidance (22 August 2019), ROBINS-I V2 from the flowcharts of its cribsheet (draft of 20 November 2025). Questions that do not apply
+  given earlier answers are set to "Not applicable" automatically.
+- Change any answer in its menu and the judgement follows; **override** a domain with a written reason when your judgement differs.
+- **Apply to the risk-of-bias table** fills the grid, so the robvis figure, the CSV and the GRADE suggestions use it.
+- Downloads: every answer (CSV), the judgements with the support for each (CSV) and a Word table; a Methods sentence is shown.
+- ROBINS-I V2 has six domains and is offered as its own tool next to ROBINS-I (2016); its figure is drawn by the app (robvis has no V2 layout).
+
+The question texts are reproduced verbatim from the RoB 2 and ROBINS-I V2 cribsheets (riskofbias.info), licensed CC BY-NC-ND 4.0:
+cite Sterne et al., BMJ 2019;366:l4898 (RoB 2) and ROBINS-I V2. Commercial use of these texts needs the authors' permission.
+Code: `R/rob_questions.R`, `R/rob_algorithms.R`, `R/ai_rob.R`, `R/ai_rob_module.R`, `R/ai_library.R` (the session PDF library).
+
 ## Navigation
 
 Five entries in the top bar, grouped by what you are doing: Meta-analysis (forest plot, bias, regression), Survival curves step 1 (digitize and compare curves) and step 2 (pooled Kaplan-Meier analysis), Review tools, and the median/IQR calculator. In the digitizer the right side has two tabs: Figure (stays in view while you use the controls on the left) and Saved curves and comparisons.
@@ -208,7 +233,9 @@ Rscript tests/test_km_app.R   # Kaplan-Meier mode in the Shiny server, including
 Rscript tests/test_compare.R  # comparisons built from the saved digitizer library, pooled sides, warnings
 Rscript tests/test_ai.R       # AI client, schema, parsing and local verification (fake API: no network, no cost)
 Rscript tests/test_ai_app.R   # AI panel and PDF extraction in the Shiny server (fake API)
-Rscript tests/test_ai_live.R  # one real API call; runs only with PONDERIS_AI_LIVE=1 and ANTHROPIC_API_KEY set
+Rscript tests/test_rob_algorithms.R # RoB 2 tables row by row, every ROBINS-I V2 flowchart path
+Rscript tests/test_ai_rob.R   # risk-of-bias assistant: schema, parsing, quote check, the tab in the Shiny server (fake API)
+Rscript tests/test_ai_live.R  # two real API calls; runs only with PONDERIS_AI_LIVE=1 and ANTHROPIC_API_KEY set
 ```
 
 Run them from this folder.

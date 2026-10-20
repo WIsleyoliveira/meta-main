@@ -1,8 +1,9 @@
-# One real call to the Claude API (costs about one cent). Runs only when asked:
+# Two real calls to the Claude API (a few cents): PDF extraction and a RoB 2 assessment. Runs only when asked:
 #   PONDERIS_AI_LIVE=1 ANTHROPIC_API_KEY=sk-ant-... Rscript tests/test_ai_live.R
 source("R/helpers.R")
 source("R/ai_client.R")
 source("R/ai_extract.R")
+source("R/review_helpers.R"); source("R/rob_questions.R"); source("R/rob_algorithms.R"); source("R/ai_rob.R")
 
 key <- Sys.getenv("ANTHROPIC_API_KEY")
 if (Sys.getenv("PONDERIS_AI_LIVE") != "1" || !nzchar(key)) {
@@ -30,4 +31,20 @@ print(cl[cl$row == 1, c("col", "value", "page", "status")])
 stopifnot(val("events_tx") == "12", val("n_tx") == "150", val("events_ctrl") == "20", val("n_ctrl") == "148")
 stopifnot(all(vapply(c("events_tx", "n_tx", "events_ctrl", "n_ctrl"), sts, "") == "verified"))
 cat(sprintf("tokens: %d in, %d out, about $%.3f\n", r$usage$input_tokens, r$usage$output_tokens, ai_cost(r$usage, "claude-sonnet-5-5")))
+
+# RoB 2: a made-up report in which allocation alternated -> Domain 1 High
+g <- tempfile(fileext = ".pdf")
+grDevices::pdf(g, width = 8.5, height = 11); plot.new()
+rob_lines <- c("Trial Q: drug B versus usual care (2022)",
+               "Methods. Patients were allocated alternately to drug B or usual care in order of admission.",
+               "Outcome assessors were not told which treatment patients received.",
+               "Results. All 210 allocated patients were followed up and analysed in the group to which they were allocated.")
+for (i in seq_along(rob_lines)) text(0, 1 - i * 0.06, rob_lines[i], adj = 0, cex = 0.8)
+grDevices::dev.off()
+rr <- ai_rob_one(list(path = g, pdf_name = "trial_q.pdf", study = "Trial Q 2022", tool = "rob2", variant = "assignment",
+                      settings = list(outcome = "mortality", effect = "assignment"), key = key, model = "claude-sonnet-5-5"))
+if (!isTRUE(rr$ok)) stop("live RoB call failed: ", rr$message)
+jj <- rob_judge("rob2", "assignment", setNames(rr$answers$answer, rr$answers$id))
+print(rr$answers[rr$answers$domain == 1, c("id", "answer", "status")])
+stopifnot(rr$answers$answer[rr$answers$id == "1.1"] %in% c("N", "PN"), jj$domains[["D1"]] == "High")
 cat("AI LIVE TEST PASSED\n")

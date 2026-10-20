@@ -201,4 +201,23 @@ stopifnot(ai_num_in("0.35", "HR 0\u00b735"), !ai_num_in("3", "HR 3\u00b75"), ai_
           st_of("0.35", "HR 0\u00b735", "the hazard ratio was HR 0\u00b735") == "verified")
 ok("num formats: mid-dot decimal and leading point")
 
+# minor review fixes
+wt <- data.frame(study_id = "Tot 2019", events_tx = "10", n_tx = "150", events_ctrl = "12", n_ctrl = "100", year = NA, subgroup = NA)
+q_far <- data.frame(study_id = "", events_tx = "", n_tx = "A total of 400 patients were randomized: 150 to PCI and 100 to CABG",
+                    events_ctrl = "", n_ctrl = "A total of 400 patients were randomized: 150 to PCI and 100 to CABG", year = "", subgroup = "")
+q_near <- q_far; q_near$n_tx <- q_near$n_ctrl <- "A total of 252 patients were randomized: 150 to PCI and 100 to CABG"
+q_arm <- q_far; q_arm$n_tx <- "a total of 150 patients in the PCI group"; q_arm$n_ctrl <- "100 patients received CABG"
+wn <- ai_check_rows(wt, "dich", q_far)
+stopifnot(length(wn) == 1, grepl("Tot 2019", wn), grepl("400", wn), grepl("250", wn),
+          length(ai_check_rows(wt, "dich", q_near)) == 0, length(ai_check_rows(wt, "dich", q_arm)) == 0,
+          length(ai_check_rows(wt, "dich")) == 0)
+wtc <- data.frame(study_id = "Tc 2020", mean_tx = "1", sd_tx = "1", n_tx = "150", mean_ctrl = "2", sd_ctrl = "1", n_ctrl = "100", year = NA, subgroup = NA)
+qc <- data.frame(study_id = "", mean_tx = "", sd_tx = "", n_tx = "We randomised 400 participants", mean_ctrl = "", sd_ctrl = "",
+                 n_ctrl = "", year = "", subgroup = "")
+qc2 <- qc; qc2$n_tx <- "150 to the intervention"; qc2$n_ctrl <- "A total of 400 participants"
+stopifnot(length(ai_check_rows(wtc, "cont", qc)) == 1, length(ai_check_rows(wtc, "cont", qc2)) == 1)
+q_odd <- q_far; q_odd$n_tx <- "150 patients were randomized 1:1"; q_odd$n_ctrl <- "100 patients at a total of 12 centres"
+stopifnot(length(ai_check_rows(wt, "dich", q_odd)) == 0)
+ok("consistency: arms far from a total in the quote")
+
 cat("AI VERIFICATION TESTS PASSED\n")

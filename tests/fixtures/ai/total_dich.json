@@ -1,0 +1,17 @@
+{
+  "id": "msg_test",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"studies\": [{\"study_id\": {\"value\": \"Trial Z 2021\", \"page\": 1, \"quote\": \"Trial Z 2021\", \"note\": \"\"}, \"year\": {\"value\": 2021, \"page\": 1, \"quote\": \"2021\", \"note\": \"\"}, \"subgroup\": {\"value\": null, \"page\": null, \"quote\": \"\", \"note\": \"\"}, \"events_tx\": {\"value\": 12, \"page\": 3, \"quote\": \"A total of 400 patients were randomized; 12 of 150 died with treatment and 20 of 148 with control\", \"note\": \"\"}, \"n_tx\": {\"value\": 150, \"page\": 3, \"quote\": \"A total of 400 patients were randomized; 12 of 150 died with treatment and 20 of 148 with control\", \"note\": \"\"}, \"events_ctrl\": {\"value\": 20, \"page\": 3, \"quote\": \"A total of 400 patients were randomized; 12 of 150 died with treatment and 20 of 148 with control\", \"note\": \"\"}, \"n_ctrl\": {\"value\": 148, \"page\": 3, \"quote\": \"A total of 400 patients were randomized; 12 of 150 died with treatment and 20 of 148 with control\", \"note\": \"\"}}], \"ambiguities\": [\"Mortality reported at 30 days and 1 year; used 30 days.\"]}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 15000,
+    "output_tokens": 900
+  }
+}

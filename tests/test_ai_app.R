@@ -194,4 +194,13 @@ testServer(app, {
   ok("reopening the panel keeps consent")
 })
 
+# minor review fixes
+options(ponderis.ai_transport = seq_transport("total_dich.json"))
+testServer(app, {
+  forest_inputs(session); ready_ai(session)
+  session$setInputs(ai_pdfs = pdfs(1), ai_run = 1)
+  stopifnot(grepl("a total of 400", html(output$ai_warnings)))
+  ok("warning: arms far from the total in the quote")
+})
+
 cat("AI EXTRACTION TESTS PASSED\n")

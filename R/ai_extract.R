@@ -179,8 +179,21 @@ ai_cells_wide <- function(cells, type) {
   d
 }
 
+# Totals of participants a quote states: "a total of 400", "in total 400", "400 patients were randomized",
+# "we enrolled 400".
+ai_quote_totals <- function(quote) {
+  q <- gsub("([0-9])[, ]([0-9]{3})(?![0-9])", "\\1\\2", ai_norm_text(quote, commas = FALSE), perl = TRUE)
+  res <- c("total(?: of)?[: ]+(?:n ?= ?)?([0-9]+)", "in total,? ([0-9]+)",
+           "([0-9]+) (?:[a-z-]+ ){0,2}(?:were |was )?(?:randomi[sz]ed|enrolled)", "(?:randomi[sz]ed|enrolled) ([0-9]+)")
+  unlist(lapply(res, function(re) {
+    m <- unlist(regmatches(q, gregexpr(re, q, perl = TRUE)))
+    as.numeric(sub(re, "\\1", m, perl = TRUE))
+  }))
+}
+
 # Plain arithmetic checks on the extracted rows; one warning per problem, naming the study.
-ai_check_rows <- function(wide, type) {
+# `quotes`, when given, has the same shape as `wide` and holds the quote behind each value.
+ai_check_rows <- function(wide, type, quotes = NULL) {
   n <- function(x) suppressWarnings(as.numeric(x))
   out <- character(0)
   for (i in seq_len(nrow(wide))) {
@@ -194,6 +207,15 @@ ai_check_rows <- function(wide, type) {
     if (type == "gen") {
       e <- n(r$effect); lo <- n(r$ci_lower); hi <- n(r$ci_upper)
       if (!any(is.na(c(e, lo, hi))) && (e < min(lo, hi) || e > max(lo, hi))) add(sprintf("the estimate %s is outside its confidence interval (%s to %s).", r$effect, r$ci_lower, r$ci_upper))
+    }
+    if (type %in% c("dich", "cont") && !is.null(quotes) && !any(is.na(c(n(r$n_tx), n(r$n_ctrl))))) {
+      nt <- n(r$n_tx); nc <- n(r$n_ctrl)
+      # a total up to the larger arm is that arm's size or counts something else ("1:1", "12 centres");
+      # within 10% the gap is usually dropouts
+      tot <- ai_quote_totals(unique(c(quotes$n_tx[i], quotes$n_ctrl[i])))
+      tot <- tot[tot > max(nt, nc)]
+      if (length(tot) && all(abs(nt + nc - tot) > 0.1 * tot))
+        add(sprintf("the arms add up to %s (%s + %s), but the quote states a total of %s.", nt + nc, r$n_tx, r$n_ctrl, tot[1]))
     }
   }
   out

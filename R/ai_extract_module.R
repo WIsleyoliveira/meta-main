@@ -178,7 +178,8 @@ ai_extract_server <- function(input, output, session, ai, raw, detect_msg) {
   })
   output$ai_warnings <- renderUI({
     w <- table(); if (!nrow(w)) return(NULL)
-    msgs <- ai_check_rows(w[, -1, drop = FALSE], run_type())
+    d <- cells(); quotes <- ai_cells_wide(transform(d, row = gi, value = quote), run_type())
+    msgs <- ai_check_rows(w[, -1, drop = FALSE], run_type(), quotes)
     ids <- w$study_id[!is.na(w$study_id)]
     for (s in unique(ids)) { k <- length(unique(w$pdf[w$study_id %in% s])); if (k > 1) msgs <- c(msgs, sprintf("Study '%s' appears in %d PDFs: keep only one source per study.", s, k)) }
     tagList(lapply(msgs, function(m) div(class = "notice warn", m)))

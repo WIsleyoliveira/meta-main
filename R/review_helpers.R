@@ -142,6 +142,11 @@ ROB_TOOLS <- list(
                             "Missing data", "Measurement of outcomes", "Selection of the reported result"),
                 short = c("D1", "D2", "D3", "D4", "D5", "D6", "D7"),
                 levels = c("Low", "Moderate", "Serious", "Critical", "No information")),
+  robins2 = list(name = "ROBINS-I V2 (non-randomized studies; draft of November 2025)",
+                 domains = c("Confounding", "Classification of interventions", "Selection of participants", "Missing data",
+                             "Measurement of the outcome", "Selection of the reported result"),
+                 short = c("D1", "D2", "D3", "D4", "D5", "D6"),
+                 levels = c("Low", "Moderate", "Serious", "Critical")),
   nos = list(name = "Newcastle-Ottawa Scale (cohort or case-control)",
              domains = c("Selection (0-4 stars)", "Comparability (0-2 stars)", "Outcome or exposure (0-3 stars)"),
              short = c("Sel", "Comp", "Out"), levels = NULL, max = c(4, 2, 3))

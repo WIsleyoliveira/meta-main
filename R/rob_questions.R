@@ -6,7 +6,7 @@
 # the deviations the reviewer chose to address `dev`).
 
 ROB_CITATION <- c(
-  rob2 = "Sterne JAC, Savović J, Page MJ, et al. RoB 2: a revised tool for assessing risk of bias in randomised trials. BMJ 2019;366:l4898. Questions reproduced from the RoB 2 cribsheet (22 August 2019), CC BY-NC-ND 4.0.",
+  rob2 = "Sterne JAC, Savovi\u0107 J, Page MJ, et al. RoB 2: a revised tool for assessing risk of bias in randomised trials. BMJ 2019;366:l4898. Questions reproduced from the RoB 2 cribsheet (22 August 2019), CC BY-NC-ND 4.0.",
   robins = "ROBINS-I V2 (draft of 20 November 2025), riskofbias.info. Questions reproduced from the ROBINS-I V2 cribsheet, CC BY-NC-ND 4.0.")
 
 ROB_ANS <- c("Y", "PY", "PN", "N", "NI")
@@ -69,7 +69,7 @@ ROB2_Q <- list(
        function(a, dev) "nonprotocol" %in% dev && aware(a)),
     rq("2.4", "Were there failures in implementing the intervention that could have affected the outcome?", "[If applicable:]",
        function(a, dev) "implementation" %in% dev),
-    rq("2.5", "Was there non-adherence to the assigned intervention regimen that could have affected participants’ outcomes?", "[If applicable:]",
+    rq("2.5", "Was there non-adherence to the assigned intervention regimen that could have affected participants\u2019 outcomes?", "[If applicable:]",
        function(a, dev) "adherence" %in% dev),
     rq("2.6", "Was an appropriate analysis used to estimate the effect of adhering to the intervention?", "If N/PN/NI to 2.3, or Y/PY/NI to 2.4 or 2.5",
        function(a, dev) {
@@ -164,7 +164,7 @@ ROBINS2_D26 <- list(
      "If Y/PY/NI to 4.5", function(a, dev) rob_is(a, "4.5", YPYNI), answers = c("NA", R_W)),
   rq("4.7", "Was the analysis based on imputing missing values?", "If N/PN to 4.4",
      function(a, dev) rob_is(a, "4.4", NPN), answers = c("NA", "Y", "PY", "PN", "NI")),
-  rq("4.8", "Is it reasonable to assume that data were ‘missing at random’ (MAR) or ‘missing completely at random’ (MCAR)?",
+  rq("4.8", "Is it reasonable to assume that data were \u2018missing at random\u2019 (MAR) or \u2018missing completely at random\u2019 (MCAR)?",
      "If Y/PY to 4.7", function(a, dev) rob_is(a, "4.7", YPY)),
   rq("4.9", "Was imputation performed appropriately?", "If Y/PY to 4.8",
      function(a, dev) rob_is(a, "4.8", YPY), answers = c("NA", R_W)),

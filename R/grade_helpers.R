@@ -151,7 +151,7 @@ grade_suggest <- function(m, bias_p = NA, control = NA_real_, rrr = 25, n_total 
 # Risk of bias from the weight each study has in the pooled result (Handbook 14.2.2: the judgement follows the studies that carry the information).
 # rob: data frame with the study name and the overall judgement of RoB 2 or ROBINS-I.
 grade_rob_suggest <- function(m, rob, tool, design = GRADE_DESIGN_RCT, rnd = TRUE) {
-  if (is.null(rob) || !nrow(rob) || !tool %in% c("rob2", "robins")) return(NULL)
+  if (is.null(rob) || !nrow(rob) || !tool %in% c("rob2", "robins", "robins2")) return(NULL)
   w <- if (rnd && !is.null(m$w.random)) m$w.random else m$w.common
   if (is.null(w)) return(NULL)
   key <- function(x) tolower(trimws(as.character(x)))
@@ -164,7 +164,7 @@ grade_rob_suggest <- function(m, rob, tool, design = GRADE_DESIGN_RCT, rnd = TRU
   sh <- vapply(c("low", "some", "high", "crit"), function(z) sum(w[cc == z]), numeric(1))
   txt <- sprintf("Weight of the studies by overall risk of bias: %.0f%% low, %.0f%% %s, %.0f%% %s%s.", 100 * sh["low"],
                  100 * sh["some"], if (tool == "rob2") "some concerns" else "moderate", 100 * sh["high"], if (tool == "rob2") "high" else "serious",
-                 if (tool == "robins") sprintf(", %.0f%% critical", 100 * sh["crit"]) else "")
+                 if (tool %in% c("robins", "robins2")) sprintf(", %.0f%% critical", 100 * sh["crit"]) else "")
   level <- if (design == GRADE_DESIGN_ROBINS) { if (sh["crit"] >= 0.5) 3 else 2 }
            else if (sh["low"] >= 0.5) 0 else 1
   if (design == GRADE_DESIGN_ROBINS) txt <- paste0(txt, " Studies assessed with ROBINS-I are normally rated down two levels for confounding and selection bias.")

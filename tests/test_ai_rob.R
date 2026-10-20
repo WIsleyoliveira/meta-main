@@ -83,3 +83,111 @@ stopifnot(nzchar(w), grepl("per-protocol", w), !nzchar(ai_rob_variant_warning("r
 ok("robins variant warning")
 
 cat("AI ROB PARSING TESTS PASSED\n")
+
+# ==================== the Risk of bias tab, in the Shiny server ====================
+suppressMessages({ library(shiny); library(meta) })
+app <- shinyAppDir(".")
+html <- function(x) paste(as.character(x$html %||% x), collapse = "")
+mk_pdf <- function(txt) { f <- tempfile(fileext = ".pdf"); grDevices::pdf(f); plot.new(); text(0.5, 0.5, txt); grDevices::dev.off(); f }
+pdfs <- function(n) { f <- vapply(seq_len(n), function(i) mk_pdf(paste("Patients were allocated alternately to the two groups.", i)), "")
+  data.frame(name = paste0("trial", seq_len(n), ".pdf"), size = file.size(f), type = "application/pdf", datapath = f, stringsAsFactors = FALSE) }
+seq_transport <- function(...) { answers <- list(...); n <- 0; bodies <- list()
+  f <- function(body, key) { n <<- n + 1; bodies[[n]] <<- body; a <- answers[[min(n, length(answers))]]
+    if (is.numeric(a)) list(status = as.integer(a), body_text = "") else list(status = 200L, body_text = fx(a)) }
+  environment(f)$count <- function() n; environment(f)$sent <- function() bodies; f }
+n_calls <- function(tr) environment(tr)$count()
+Sys.unsetenv(c("ANTHROPIC_API_KEY", "PONDERIS_AI_MAX_CALLS"))
+ready_ai <- function(session) session$setInputs(ai_key = "sk-ant-x", ai_save_key = 1, ai_consent = TRUE)
+options(ponderis.ai_runner = "sync")
+start <- function(session, lib, studies = "Smith 2019\nJones 2020", n_pdf = 2) {
+  ready_ai(session)
+  session$setInputs(rob_tool = "rob2", rob_studies = studies, airob_outcome = "mortality", airob_effect = "assignment", airob_pdfs = pdfs(n_pdf))
+  vapply(lib$entries(), `[[`, "", "id")
+}
+
+tr <- seq_transport("rob2_alternation.json", 529)
+options(ponderis.ai_transport = tr)
+testServer(app, {
+  ids <- start(session, ai_lib)
+  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[2], airob_run = 1)
+  as <- rev$airob$assessments()
+  stopifnot(n_calls(tr) == 2, isTRUE(as[["rob2|Smith 2019"]]$ok), identical(as[["rob2|Jones 2020"]]$ok, FALSE))
+  e <- html(output$airob_errors); cards <- html(output$airob_cards)
+  stopifnot(grepl("Jones 2020", e), grepl("busy", e), grepl("airob_retry", e), grepl("Smith 2019", cards),
+            grepl("Was the allocation sequence random?", cards, fixed = TRUE), grepl("Suggested by the RoB 2 algorithm", cards))
+  ok("assess two studies, one fails")
+
+  j <- rev$airob$judgement("rob2|Smith 2019")
+  stopifnot(j$domains[["D1"]] == "High", j$overall == "High")
+  session$setInputs(airob_answer = list(study = "rob2|Smith 2019", id = "2.1", answer = "Y"))
+  j <- rev$airob$judgement("rob2|Smith 2019")
+  stopifnot(j$answers[["2.3"]] == "NI", j$domains[["D2"]] == "Some concerns",
+            rev$airob$assessments()[["rob2|Smith 2019"]]$answers$edited[rev$airob$assessments()[["rob2|Smith 2019"]]$answers$id == "2.1"])
+  session$setInputs(airob_answer = list(study = "rob2|Smith 2019", id = "1.2", answer = "Y"))
+  stopifnot(rev$airob$judgement("rob2|Smith 2019")$domains[["D1"]] == "Some concerns")
+  ok("edit answer recomputes")
+
+  session$setInputs(airob_override = list(study = "rob2|Smith 2019", domain = "D5", level = "Low", reason = ""))
+  stopifnot(is.null(rev$airob$assessments()[["rob2|Smith 2019"]]$overrides$D5))
+  session$setInputs(airob_override = list(study = "rob2|Smith 2019", domain = "D5", level = "High", reason = "Outcome switched from the registry."))
+  stopifnot(rev$airob$final("rob2|Smith 2019")[["D5"]] == "High", grepl("Outcome switched", html(output$airob_cards)))
+  ok("override needs a reason")
+
+  session$setInputs(airob_apply = 1)
+  d <- rev$rob_data()
+  stopifnot(d$D1[d$study == "Smith 2019"] == "Some concerns", d$D5[d$study == "Smith 2019"] == "High", is.na(d$D1[d$study == "Jones 2020"]))
+  ok("apply to the risk-of-bias table")
+
+  session$setInputs(rob_studies = "Smith 2019a\nJones 2020", airob_apply = 2)
+  stopifnot(grepl("Smith 2019", html(output$airob_apply_note)), grepl("not in the study list", html(output$airob_apply_note)))
+  ok("renamed study is not applied to another row")
+
+  csv <- read.csv(output$dl_airob_csv, stringsAsFactors = FALSE)
+  stopifnot(nrow(csv) == 22, all(c("study", "domain", "question_id", "question", "answer", "ai_answer", "edited", "page", "quote", "rationale", "status") %in% names(csv)))
+  jd <- read.csv(output$dl_airob_judgements, stringsAsFactors = FALSE)
+  stopifnot(nrow(jd) == 6, jd$source[jd$domain == "D5"] == "override", grepl("Outcome switched", jd$support[jd$domain == "D5"]))
+  stopifnot(grepl("large language model", html(output$airob_methods)), grepl("RoB 2", html(output$airob_methods)))
+  ok("exports and methods text")
+
+  session$setInputs(rob_tool = "robins2")
+  stopifnot(!grepl("Smith 2019", html(output$airob_cards)), length(rev$airob$assessments()) == 2)
+  session$setInputs(rob_tool = "rob2")
+  stopifnot(grepl("Smith 2019", html(output$airob_cards)))
+  ok("tool switch keeps but hides")
+})
+
+tr <- seq_transport("rob2_alternation.json", "rob2_alternation.json")
+options(ponderis.ai_transport = tr)
+testServer(app, {
+  ids <- start(session, ai_lib, n_pdf = 1)
+  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[1], airob_run = 1)
+  b <- environment(tr)$sent()
+  stopifnot(n_calls(tr) == 2, grepl("Smith 2019", b[[1]]$messages[[1]]$content[[2]]$text), grepl("Jones 2020", b[[2]]$messages[[1]]$content[[2]]$text))
+  ok("one PDF for two studies")
+})
+
+pending <- list()
+options(ponderis.ai_runner = function(job, done) pending[[length(pending) + 1]] <<- list(job = job, done = done))
+testServer(app, {
+  ids <- start(session, ai_lib)
+  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[2], airob_run = 1)
+  stopifnot(length(pending) == 1)
+  session$setInputs(airob_discard = 1)
+  pending[[1]]$done(list(ok = FALSE, error = "network", message = "late", called = TRUE))
+  session$flushReact()
+  stopifnot(length(rev$airob$assessments()) == 0, length(pending) == 1)
+  session$setInputs(airob_run = 2)
+  stopifnot(length(pending) == 2)
+  ok("discard during a run")
+})
+options(ponderis.ai_runner = "sync")
+
+testServer(app, {
+  session$setInputs(rob_tool = "rob2", rob_studies = "Smith 2019", airob_run = 1)
+  stopifnot(grepl("API key", html(output$airob_reason)), length(rev$airob$assessments()) == 0)
+  session$setInputs(rob_tool = "nos")
+  stopifnot(grepl("RoB 2 and ROBINS-I V2", html(output$airob_reason)))
+  ok("disabled when not ready or tool not covered")
+})
+
+cat("AI ROB APP TESTS PASSED\n")

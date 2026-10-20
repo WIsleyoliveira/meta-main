@@ -3,6 +3,8 @@
 # Uses robvis and ggplot2 when they are installed; otherwise the app falls back to the simpler base-graphics plots.
 
 rob_has_robvis <- function() requireNamespace("robvis", quietly = TRUE) && requireNamespace("ggplot2", quietly = TRUE)
+# robvis knows RoB 2 and ROBINS-I (2016, 7 domains); ROBINS-I V2 (6 domains) uses the app's own figure
+ROBVIS_TOOLS <- c("rob2", "robins")
 
 # Colours read from the reference figure (Low, Some concerns / Moderate, High / Serious, Critical, No information)
 ROBVIS_COLOURS <- list(rob2 = c("#56BA37", "#E0E04A", "#AE2418", "#4EA1F7"),

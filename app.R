@@ -377,7 +377,7 @@ server <- function(input, output, session) {
   }), 400)
 
   extra_server(input, output, session, fit, raw)
-  review_server(input, output, session, fit)
+  rev <- review_server(input, output, session, fit, ai = ai, library = ai_lib)
   code_server(input, output, session, fit)
   output$hw_forest_guide <- renderUI({ f <- fit(); req(isTRUE(f$ok)); guide_forest(f$env$m$sm) })
 

@@ -589,3 +589,24 @@ body:has(input[name="mode"][value="home"]:checked) .colophon { display: none; }
 .ai-evidence blockquote { font-family: "Literata", Georgia, serif; margin: 0.3rem 0; }
 .ai-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem; }
 @media print { .ai-btn, .ai-extract, .ai-review { display: none !important; } }
+
+/* ---------- AI risk-of-bias assessments ---------- */
+.airob-card { border: 1px solid var(--rule); border-radius: 3px; margin: 0.7rem 0; background: #fff; }
+.airob-card > summary { padding: 0.6rem 0.9rem; cursor: pointer; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; }
+.airob-pdf { color: var(--muted); font-size: 0.85rem; }
+.airob-domain { padding: 0.4rem 0.9rem 0.8rem; border-top: 1px solid var(--rule); }
+.airob-domain h5 { font-size: 0.95rem; margin: 0.4rem 0; display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.airob-level { font-size: 0.8rem; font-weight: 700; padding: 0.1rem 0.5rem; border-radius: 3px; background: #EEF1F4; }
+.airob-level.Low { background: #DDF0E3; } .airob-level.Some_concerns, .airob-level.Moderate { background: #FBF1CF; }
+.airob-level.High, .airob-level.Serious { background: #F8DADF; } .airob-level.Critical { background: #0F1B27; color: #fff; }
+table.airob-q { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+table.airob-q td { vertical-align: top; padding: 0.35rem 0.4rem; border-bottom: 1px solid #EEF1F4; }
+table.airob-q td.airob-id { width: 3rem; font-weight: 700; color: var(--muted); }
+table.airob-q td:last-child { width: 13rem; }
+table.airob-q tr.airob-na { opacity: 0.55; }
+table.airob-q blockquote { font-family: "Literata", Georgia, serif; margin: 0.3rem 0 0.2rem; padding-left: 0.6rem; border-left: 2px solid var(--rule); }
+.airob-cond { color: var(--muted); font-style: italic; }
+.airob-override { margin-top: 0.4rem; font-size: 0.85rem; }
+.airob-override[open] { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
+.airob-override select, .airob-override input { width: auto; min-width: 10rem; }
+@media print { .airob-override, .airob-answer { display: none !important; } }

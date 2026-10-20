@@ -47,9 +47,11 @@ review_ui <- function() {
             textAreaInput("rob_studies", "Studies (one per line)", rows = 6, width = "100%", placeholder = "Kemna 2016\nSmith 2012"),
             actionLink("rob_from_fit", "Take the study names from my forest plot"),
             conditionalPanel("input.rob_tool != 'nos'", textInput("rob_letter", "Panel letter on the figure (optional)", "", placeholder = "A", width = "120px")),
-            div(class = "aside", "Rows are kept when you add studies at the end. The overall judgement is filled in by the app: the worst domain for RoB 2 and ROBINS-I, and the usual star cut-offs for Newcastle-Ottawa. Adjust it in your text if your guideline asks for more judgement.")
+            div(class = "aside", "Rows are kept when you add studies at the end. The overall judgement is filled in by the app: the worst domain for RoB 2 and ROBINS-I, and the usual star cut-offs for Newcastle-Ottawa. Adjust it in your text if your guideline asks for more judgement."),
+            ai_rob_ui()
           ),
           div(class = "results",
+            uiOutput("airob_review"),
             uiOutput("rob_note"),
             uiOutput("rob_grid"),
             conditionalPanel("output.rob_has",
@@ -73,7 +75,7 @@ review_ui <- function() {
   )
 }
 
-review_server <- function(input, output, session, fit) {
+review_server <- function(input, output, session, fit, ai = NULL, library = NULL) {
 
   save_plot <- function(file, ext, w, h, draw) {
     switch(ext, png = ragg::agg_png(file, width = w, height = h, units = "in", res = 300),
@@ -114,6 +116,16 @@ review_server <- function(input, output, session, fit) {
     s
   })
   rob_key <- function(tool, i, s, j) paste0("rob_", tool, "_", gsub("[^A-Za-z0-9]", "_", s), "_", j)
+  # judgements set by "Apply to the risk-of-bias table" (AI assessments): used where a cell has not been rendered yet
+  rob_preset <- reactiveVal(list())
+  apply_levels <- function(tool, i, study, levels) {
+    p <- rob_preset()
+    for (j in seq_along(levels)) {
+      id <- rob_key(tool, i, study, j); p[[id]] <- levels[j]
+      updateSelectInput(session, id, selected = levels[j])
+    }
+    rob_preset(p)
+  }
 
   output$rob_grid <- renderUI({
     tool <- input$rob_tool %||% "rob2"; tl <- ROB_TOOLS[[tool]]; st <- rob_names()
@@ -121,7 +133,7 @@ review_server <- function(input, output, session, fit) {
     head <- tags$tr(tags$th("Study"), lapply(seq_along(tl$short), function(j) tags$th(title = tl$domains[j], tl$short[j])))
     rows <- lapply(seq_along(st), function(i) {
       tags$tr(tags$td(st[i]), lapply(seq_along(tl$short), function(j) {
-        id <- rob_key(tool, i, st[i], j); cur <- isolate(input[[id]])
+        id <- rob_key(tool, i, st[i], j); cur <- isolate(input[[id]]) %||% isolate(rob_preset())[[id]]
         tags$td(if (tool == "nos")
           numericInput(id, NULL, value = if (is.null(cur)) NA else cur, min = 0, max = tl$max[j], step = 1, width = "70px")
         else selectInput(id, NULL, c("", tl$levels), selected = cur %||% "", width = "130px", selectize = FALSE))
@@ -135,7 +147,7 @@ review_server <- function(input, output, session, fit) {
     tool <- input$rob_tool %||% "rob2"; tl <- ROB_TOOLS[[tool]]; st <- rob_names(); req(length(st) > 0)
     d <- rob_template(tool, st)
     for (j in seq_along(tl$short)) d[[tl$short[j]]] <- vapply(seq_along(st), function(i) {
-      v <- input[[rob_key(tool, i, st[i], j)]]
+      v <- input[[rob_key(tool, i, st[i], j)]] %||% rob_preset()[[rob_key(tool, i, st[i], j)]]
       if (is.null(v) || (length(v) == 1 && (is.na(v) || identical(v, "")))) NA_character_ else as.character(v)
     }, character(1))
     d
@@ -145,9 +157,9 @@ review_server <- function(input, output, session, fit) {
   outputOptions(output, "rob_has", suspendWhenHidden = FALSE)
   rob_tool <- reactive(input$rob_tool %||% "rob2")
   rob_rows <- debounce(complete_rows, 500)   # the figure takes a moment to draw, so wait until the person stops changing cells
-  output$rob_note <- renderUI(if (!rob_has_robvis() && rob_tool() != "nos")
+  output$rob_note <- renderUI(if (!rob_has_robvis() && rob_tool() %in% ROBVIS_TOOLS)
     div(class = "notice warn", "For the figure in the style of the robvis package (traffic light with the domain key, plus the summary bars), install it once in R: install.packages(\"robvis\"). Until then a simpler figure is drawn."))
-  rob_fig_ok <- reactive(rob_has_robvis() && rob_tool() != "nos")
+  rob_fig_ok <- reactive(rob_has_robvis() && rob_tool() %in% ROBVIS_TOOLS)
   output$rob_fig_on <- reactive(rob_fig_ok()); outputOptions(output, "rob_fig_on", suspendWhenHidden = FALSE)
   rob_psize <- ROB_PSIZE
   rob_dim <- reactive(rob_fig_size(rob_rows(), rob_tool(), rob_psize))
@@ -175,6 +187,10 @@ review_server <- function(input, output, session, fit) {
   output$dl_rob_pdf <- downloadHandler("risk_of_bias_figure.pdf", function(file) rob_save(file, "pdf"))
   output$dl_rob_csv <- downloadHandler("risk_of_bias.csv", function(file) utils::write.csv(rob_table(complete_rows(), input$rob_tool %||% "rob2"), file, row.names = FALSE))
 
+  # ---------------- AI assessments ----------------
+  airob <- if (!is.null(ai) && !is.null(library)) ai_rob_server(input, output, session, ai, library, rob_names, rob_tool, apply_levels)
+
   # ---------------- GRADE ----------------
   grade_server(input, output, session, fit, rob_rows = complete_rows, rob_tool = rob_tool)
+  list(rob_data = rob_data, airob = airob)
 }

@@ -36,13 +36,14 @@ ai_extract_ui <- function() {
 }
 
 # Background runner: one ExtendedTask; its mirai worker loads the plain AI functions and runs ai_run_job().
-ai_runner_mirai <- function() {
+# Background runner: one ExtendedTask; its mirai worker loads the plain AI functions and runs `fun(job)`.
+ai_runner_mirai <- function(fun = "ai_run_job", sources = c("helpers.R", "ai_client.R", "ai_extract.R")) {
   dir <- normalizePath(".")
   waiting <- list()   # callbacks in the order the jobs were handed to the task
   task <- ExtendedTask$new(function(job) mirai::mirai({
-    source(file.path(dir, "R", "helpers.R")); source(file.path(dir, "R", "ai_client.R")); source(file.path(dir, "R", "ai_extract.R"))
-    ai_run_job(job)
-  }, job = job, dir = dir))
+    for (f in sources) source(file.path(dir, "R", f))
+    do.call(fun, list(job))
+  }, job = job, dir = dir, fun = fun, sources = sources))
   observeEvent(task$status(), {
     st <- task$status()
     if (!st %in% c("success", "error") || !length(waiting)) return()

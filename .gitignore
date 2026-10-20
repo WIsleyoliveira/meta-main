@@ -1,0 +1,10 @@
+# R
+.Rhistory
+.RData
+.Rproj.user/
+Rplots.pdf
+# test outputs (screenshots, generated files)
+tests/out/
+# editors / OS
+.DS_Store
+node_modules/

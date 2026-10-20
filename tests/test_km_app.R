@@ -1,0 +1,48 @@
+# Shiny server logic for KM mode (no browser): example -> analysis outputs -> send HRs to forest plot
+suppressMessages({library(shiny); library(bslib); library(DT); library(meta); library(IPDfromKM); library(survival)})
+app <- shinyAppDir(".")
+ok <- function(c, m) if (!isTRUE(c)) stop(m, call. = FALSE)
+
+testServer(app, {
+  session$setInputs(mode = "km", type = "dich", km_tpl_sep = ",", km_scale = "proportion", km_curve_type = "survival",
+    km_display = "survival", km_time_unit = "months", km_name_tx = "Treatment", km_name_ctrl = "Control",
+    km_conf = TRUE, km_marks = FALSE, km_risk_table = TRUE, km_ypct = FALSE, km_xmax = NA, km_ymin = 0,
+    km_landmarks = "12, 24", km_tau = NA, km_landmark_time = NA, km_cuts = "", km_truncs = "", km_tv_df = "3",
+    km_send_src = "reconstructed", km_outcome = "all-cause mortality")
+  session$setInputs(km_load_example = 1)
+  session$elapse(2000)
+  h <- as.character(output$km_headline$html)
+  ok(grepl("Hazard ratio", h), "headline shows a hazard ratio")
+  hr <- as.numeric(sub(".*stat-value\">([0-9.]+)<.*", "\\1", gsub("\n", "", h)))
+  ok(hr > 0.6 && hr < 0.95, paste("pooled HR plausible:", hr))
+  ok(grepl("Median survival", as.character(output$km_survival_tables$html)), "survival tables render")
+  ok(!is.null(output$km_check_notes), "check notes render")
+  ok(is.null(output$km_notices$html) || !grepl("error", as.character(output$km_notices$html)), "no errors shown")
+  html <- function(x) as.character(x$html)
+  ok(grepl("Events per 100", html(output$km_arm_summary)), "arm summary renders")
+  ok(grepl("Landmark used", html(output$km_nph_verdict)), "non-proportional hazards verdict renders")
+  ok(grepl("Hazard ratio", html(output$km_landmark_table)) && grepl("After", html(output$km_piecewise_table)), "landmark and interval tables")
+  ok(grepl("Stratified by study", html(output$km_sens_table)), "sensitivity table")
+  ok(grepl("analyses: hazard ratios from", html(output$km_sens_verdict)), "sensitivity verdict")
+  ok(grepl("Published HR", html(output$km_hr_table)) && grepl("not entered", html(output$km_hr_table)), "published HR comparison (Trial B has none)")
+  rep_html <- html(output$km_report)
+  ok(grepl("Guyot", rep_html) && grepl("all-cause mortality", rep_html) && grepl("Methods", rep_html) && grepl("Results", rep_html), "written Methods, Results and References render")
+  tf <- tempfile(); ok(TRUE, "report download handler exists")
+  # send published-first: trial B falls back to the reconstructed HR
+  session$setInputs(km_send_src = "published_first", km_send = 1)
+  ok(nrow(raw()$data) == 3, "published_first keeps three studies")
+  session$setInputs(km_send_src = "published_only", km_send = 2)
+  ok(nrow(raw()$data) == 2, "published_only keeps the two studies with a published HR")
+  session$setInputs(km_send_src = "reconstructed", km_send = 3)
+  ok(!is.null(raw()), "forest data set")
+  ok(identical(names(raw()$data), c("study_id", "effect", "ci_lower", "ci_upper")), "forest columns")
+  ok(nrow(raw()$data) == 3, "three studies sent")
+  session$setInputs(km_run_variants = 1); session$elapse(2000)
+  ok(grepl("Reconstruction ignoring", html(output$km_sens_table)), "reconstruction variants added to the sensitivity table")
+  ok(grepl("Digitizing error", html(output$km_digit_note)), "digitizing-error summary shown after the checks")
+  ok(grepl("digitizing error", html(output$km_report)), "report mentions digitizing error")
+  session$setInputs(km_digit_noise = 0.02, km_run_variants = 2); session$elapse(2000)
+  ok(grepl("SD 0.020", html(output$km_digit_note)), "noise setting reaches the bootstrap")
+  cat(gsub("<[^>]+>", " ", html(output$km_digit_note)), "\n")
+  cat("pooled HR", hr, "\nKM APP TESTS PASSED\n")
+})

@@ -1,0 +1,35 @@
+// Browser test of the calculator: single study, table with mixed reported and estimated values, send to the forest plot, other conversions.
+const { chromium } = require(process.env.PLAYWRIGHT_PATH || '/opt/npm-tools/node_modules/playwright');
+const url = process.argv[2] || 'http://127.0.0.1:4763';
+const ok = (c, m) => { if (!c) { console.log('FAIL', m); process.exitCode = 1; } else console.log('OK  ', m); };
+(async () => {
+  const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const pg = await b.newPage({ viewport: { width: 1500, height: 1400 } }); const errs = []; pg.on('pageerror', e => errs.push(e.message));
+  await pg.addInitScript(() => { setInterval(() => { const r = document.querySelector('input[name=mode]:checked'); const v = r && r.value; if (v !== window.__lm) { window.__lm = v; setTimeout(() => document.querySelectorAll('.step.collapsed .step-head').forEach(h => h.click()), 250); } }, 150); });
+  await pg.goto(url); await pg.waitForTimeout(2000);
+  await pg.click('.mode-bar span:has-text("Calculator")'); await pg.waitForTimeout(500);
+  const vis = async () => (await pg.locator('.results:visible').innerText()).replace(/\s+/g, ' ');
+  await pg.click('#cv_example'); await pg.waitForTimeout(1500);
+  let t = await vis();
+  ok(/Wan 2014/.test(t) && /Box-Cox/.test(t) && /approximate p/.test(t), 'single study: methods and skewness p-value are shown');
+  await pg.click('#cv_batch_example'); await pg.waitForTimeout(1500); t = await vis();
+  ok(/Smith 2019/.test(t) && /Lee 2021/.test(t) && /Costa 2022/.test(t), 'table: all studies converted');
+  ok(/reported/.test(t) && /Wan 2014|Box-Cox/.test(t), 'table: reported values are kept and the others estimated');
+  ok(await pg.isVisible('#cv_send'), 'table: send button appears when there is a group column');
+  await pg.screenshot({ path: 'tests/out/conv_batch.png', fullPage: true });
+  await pg.click('#cv_send'); await pg.waitForTimeout(3000);
+  ok((await pg.locator('.mode-bar input:checked').getAttribute('value')) === 'forest', 'sent: forest plot mode is open');
+  const body = (await pg.locator('body').innerText()).replace(/\s+/g, ' ');
+  ok(/Means and SDs from the calculator/.test(body) && await pg.isVisible('#forest_plot img, .results:visible img'), 'sent: the forest plot is drawn from the converted table');
+  await pg.screenshot({ path: 'tests/out/conv_to_forest.png', fullPage: true });
+  await pg.click('.mode-bar span:has-text("Calculator")'); await pg.waitForTimeout(600);
+  await pg.evaluate(() => document.querySelector('input[name=cv_dir][value=other]').click()); await pg.waitForTimeout(500);
+  await pg.fill('#cv_se', '2'); await pg.fill('#cv_se_n', '25'); await pg.waitForTimeout(1200); t = await vis(); ok(/= 10/.test(t), 'SE 2 with n 25 gives SD 10');
+  await pg.evaluate(() => $('#cv_other')[0].selectize.setValue('ci')); await pg.waitForTimeout(500);
+  await pg.fill('#cv_ci_lo', '40'); await pg.fill('#cv_ci_hi', '60'); await pg.fill('#cv_ci_n', '100'); await pg.waitForTimeout(1200); t = await vis(); ok(/= 50\.39/.test(t), 'CI 40 to 60 with n 100 gives SD 50.4');
+  await pg.evaluate(() => $('#cv_other')[0].selectize.setValue('comb')); await pg.waitForTimeout(500);
+  for (const [k, v] of [['n1', 40], ['m1', 10], ['s1', 3], ['n2', 55], ['m2', 14], ['s2', 5]]) await pg.fill('#cv_c_' + k, String(v));
+  await pg.waitForTimeout(1200); t = await vis(); ok(/95/.test(t) && /Combined group/.test(t), 'combining two groups shows a result');
+  ok(errs.length === 0, 'no page errors: ' + JSON.stringify(errs));
+  await b.close();
+})();

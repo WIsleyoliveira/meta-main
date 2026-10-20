@@ -63,6 +63,11 @@ big <- tempfile(fileext = ".pdf"); writeBin(raw(33 * 1024^2), big)
 r <- ai_pdf_check(big)
 stopifnot(identical(r$ok, FALSE), r$error == "too_large")
 ok("pdf check")
+# base64 makes a PDF a third larger and the API takes requests up to 32 MB, so 25 MB is already too large
+big25 <- tempfile(fileext = ".pdf"); writeBin(raw(25 * 1024^2), big25)
+r <- ai_pdf_check(big25)
+stopifnot(identical(r$ok, FALSE), r$error == "too_large", grepl("24 MB", r$message), !grepl("32 MB", r$message))
+ok("pdf check: limit leaves room for base64")
 
 seen <- NULL
 httr2::local_mocked_responses(function(req) {

@@ -11,7 +11,8 @@ AI_MODELS <- c("Claude Opus 5.5 (most accurate)" = "claude-opus-5-5",
 # US dollars per million tokens (input, output); shown as an estimate
 AI_PRICES <- list("claude-opus-5-5" = c(4, 20), "claude-sonnet-5-5" = c(2, 10))
 AI_PKGS <- c("httr2", "jsonlite", "mirai", "promises", "pdftools")
-AI_MAX_PDF_BYTES <- 32 * 1024^2
+# the API takes requests up to 32 MB and base64 makes the PDF a third larger
+AI_MAX_PDF_BYTES <- 24 * 1024^2
 AI_MAX_PDF_PAGES <- 600
 
 ai_available <- function() AI_PKGS[!vapply(AI_PKGS, requireNamespace, logical(1), quietly = TRUE)]
@@ -63,7 +64,7 @@ AI_ERRORS <- c(
   bad_key = "The API key was refused. Check it in the AI panel.",
   rate_limited = "Too many requests to the AI service. Wait a minute and try again.",
   overloaded = "The AI service is busy or unavailable. Try again in a few minutes.",
-  too_large = "This PDF is too large for the AI (more than 32 MB or 600 pages). Split it or send only the relevant pages.",
+  too_large = "This PDF is too large for the AI (more than 24 MB or 600 pages). Split it or send only the relevant pages.",
   bad_pdf = "This file could not be read as a PDF.",
   bad_request = "The AI service rejected the request.",
   refusal = "The AI declined to process this document.",

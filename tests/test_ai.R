@@ -3,6 +3,7 @@
 # in for the API, so these tests cost nothing and need no key.
 source("R/helpers.R")
 source("R/ai_client.R")
+source("R/ai_extract.R")
 
 ok <- function(name) cat("ok:", name, "\n")
 fx <- function(f) paste(readLines(file.path("tests/fixtures/ai", f), warn = FALSE), collapse = "\n")
@@ -86,3 +87,57 @@ stopifnot(is.character(ai_available()), length(ai_available()) == 0)
 ok("packages available")
 
 cat("AI CLIENT TESTS PASSED\n")
+
+# ==================== extraction: schema, prompt, parsing ====================
+walk <- function(x, f) { f(x); if (is.list(x)) for (el in x) walk(el, f) }
+for (type in names(SPEC)) {
+  sc <- ai_extract_schema(type)
+  walk(sc, function(x) if (is.list(x) && identical(x$type, "object")) {
+    stopifnot(identical(x$additionalProperties, FALSE), setequal(unlist(x$required), names(x$properties)))
+  })
+  bad <- character(0)
+  walk(sc, function(x) if (is.list(x)) bad <<- c(bad, intersect(names(x), c("minimum", "maximum", "minLength", "maxLength", "multipleOf"))))
+  stopifnot(!length(bad))
+  stopifnot(identical(names(sc$properties$studies$items$properties), c("study_id", "year", "subgroup", names(SPEC[[type]]$cols))))
+}
+ok("schema strict")
+
+js <- as.character(jsonlite::toJSON(ai_extract_schema("cont"), auto_unbox = TRUE))
+stopifnot(grepl('"additionalProperties":false', js, fixed = TRUE), grepl('"$defs"', js, fixed = TRUE),
+          grepl('"required":["studies","ambiguities"]', js, fixed = TRUE))
+ok("schema serializes")
+
+stopifnot(grepl("Treatment: SD", ai_extract_system("cont"), fixed = TRUE), grepl("verbatim", ai_extract_system("dich")))
+ok("system names columns")
+
+pdf1 <- one_page_pdf("Trial Z")
+r <- ai_extract_one(pdf1, "trialz.pdf", "dich", "30-day mortality", "", "", key, "claude-opus-5-5", transport = fake(200, fx("ok_dich.json")))
+cl <- r$cells
+stopifnot(isTRUE(r$ok), r$name == "trialz.pdf", nrow(cl) == 2 * length(template_cols("dich")),
+          setequal(unique(cl$col), template_cols("dich")),
+          cl$value[cl$row == 1 & cl$col == "n_tx"] == "150", cl$page[cl$row == 1 & cl$col == "n_tx"] == 3L,
+          is.na(cl$value[cl$row == 1 & cl$col == "subgroup"]), cl$value[cl$row == 1 & cl$col == "year"] == "2021",
+          all(is.na(cl$status)), length(r$ambiguities) == 1, r$usage$input_tokens == 15000)
+ok("extract one ok")
+
+r <- ai_extract_one(pdf1, "review.pdf", "dich", "", "", "", key, "claude-opus-5-5", transport = fake(200, fx("zero_rows.json")))
+stopifnot(isTRUE(r$ok), nrow(r$cells) == 0, grepl("Review article", r$ambiguities[1]))
+ok("extract one zero rows")
+
+tr <- fake(200, fx("ok_dich.json"))
+r <- ai_extract_one(big, "big.pdf", "dich", "", "", "", key, "claude-opus-5-5", transport = tr)
+stopifnot(identical(r$ok, FALSE), r$error == "too_large", calls(tr) == 0, r$name == "big.pdf")
+r <- ai_extract_one(pdf1, "x.pdf", "dich", "", "", "", key, "claude-opus-5-5", transport = fake(529))
+stopifnot(identical(r$ok, FALSE), r$error == "overloaded", nzchar(r$message))
+ok("extract one errors")
+
+got <- NULL
+cap <- function(body, key) { got <<- body; list(status = 200L, body_text = fx("ok_dich.json")) }
+invisible(ai_extract_one(pdf1, "x.pdf", "dich", "30-day mortality", "PCI vs CABG", "use ITT", key, "claude-opus-5-5", transport = cap))
+ct <- got$messages[[1]]$content
+stopifnot(ct[[1]]$type == "document", ct[[2]]$type == "text", grepl("30-day mortality", ct[[2]]$text, fixed = TRUE),
+          grepl("PCI vs CABG", ct[[2]]$text, fixed = TRUE), grepl("use ITT", ct[[2]]$text, fixed = TRUE),
+          identical(got$output_config$format$schema, ai_extract_schema("dich")))
+ok("request carries PDF and outcome")
+
+cat("AI EXTRACTION PARSING TESTS PASSED\n")

@@ -476,7 +476,7 @@ plot_height_in <- function(k, n_sub = 0, pi = FALSE, het = TRUE, details = FALSE
   max(3.4, round(hdr + 0.27 * rows, 1))
 }
 
-methods_text <- function(p, k) {
+methods_text <- function(p, k, ai = FALSE) {
   rnd <- p$model %in% c("random", "both"); cmn <- p$model %in% c("common", "both")
   what <- SM_NAMES[[p$sm]]
   mod <- if (rnd && cmn) "common-effect and random-effects models"
@@ -492,5 +492,7 @@ methods_text <- function(p, k) {
          if (rnd && p$pi) ", and a prediction interval is reported" else "",
          ". Analyses were performed in R (version ",
          paste(R.version$major, R.version$minor, sep = "."), ") with the meta package (version ",
-         as.character(utils::packageVersion("meta")), "). Adapt this paragraph to your protocol before use.")
+         as.character(utils::packageVersion("meta")), ").",
+         if (isTRUE(ai)) " Data were extracted with the help of a large language model (Claude, Anthropic) and checked by the authors against the source articles." else "",
+         " Adapt this paragraph to your protocol before use.")
 }

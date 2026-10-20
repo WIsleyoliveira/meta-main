@@ -85,17 +85,17 @@ ai_extract_one <- function(path, name, type, outcome, arms, notes, key, model, t
 
 # ---- Local check of quotes and numbers against the PDF text ----
 
-AI_LIGATURES <- c("ﬀ" = "ff", "ﬁ" = "fi", "ﬂ" = "fl", "ﬃ" = "ffi", "ﬄ" = "ffl", "ﬅ" = "st", "ﬆ" = "st")
+AI_LIGATURES <- c("\ufb00" = "ff", "\ufb01" = "fi", "\ufb02" = "fl", "\ufb03" = "ffi", "\ufb04" = "ffl", "\ufb05" = "st", "\ufb06" = "st")
 
 # Text as it is compared: line-break hyphenation joined, ligatures spelled out, every dash and minus
 # written "-", whitespace collapsed, lower case; with commas = TRUE a comma between digits becomes a point.
 ai_norm_text <- function(x, commas = TRUE) {
   x <- enc2utf8(as.character(x))
-  x <- gsub("­", "", x, fixed = TRUE)                                  # soft hyphen
+  x <- gsub("\u00ad", "", x, fixed = TRUE)                                  # soft hyphen
   x <- gsub("([[:alpha:]])-[ \t]*\r?\n[ \t]*([[:lower:]])", "\\1\\2", x)    # mortal-\nity
   for (l in names(AI_LIGATURES)) x <- gsub(l, AI_LIGATURES[[l]], x, fixed = TRUE)
-  x <- gsub("[‐-―−﹣－]", "-", x)
-  x <- gsub("[   ]", " ", x)
+  x <- gsub("[\u2010-\u2015\u2212\ufe63\uff0d]", "-", x)
+  x <- gsub("[\u00a0\u2009\u202f]", " ", x)
   if (commas) x <- gsub("([0-9]),([0-9])", "\\1.\\2", x)
   tolower(trimws(gsub("[[:space:]]+", " ", x)))
 }
@@ -177,4 +177,17 @@ ai_check_rows <- function(wide, type) {
     }
   }
   out
+}
+
+# One PDF from start to end, as the background worker runs it: extraction, then the local check.
+# `job` is a plain list (no reactives): path, name, type, outcome, arms, notes, key, model.
+ai_run_job <- function(job, transport = ai_http_transport) {
+  r <- ai_extract_one(job$path, job$name, job$type, job$outcome, job$arms, job$notes, job$key, job$model, transport = transport)
+  if (isTRUE(r$ok) && nrow(r$cells)) {
+    pages <- tryCatch(pdftools::pdf_text(job$path), error = function(e) character(0))
+    r$cells <- ai_verify(r$cells, pages)
+  }
+  # the call was made (and is counted) unless the file was refused before sending
+  r$called <- !(identical(r$error, "too_large") || identical(r$error, "bad_pdf") || identical(r$error, "no_key"))
+  r
 }

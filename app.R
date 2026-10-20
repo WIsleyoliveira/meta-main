@@ -77,7 +77,8 @@ ui <- fluidPage(
                   buttonLabel = "Choose file", placeholder = "No file yet", width = "100%"),
         actionLink("load_example", "Load example data instead"),
         uiOutput("detect_note"),
-        uiOutput("mapping")
+        uiOutput("mapping"),
+        ai_extract_ui()
       ),
 
       step("Set up the analysis", help = "Choose the effect measure that fits your outcome (risk ratio for yes/no outcomes). Keep Random effects unless you have a reason not to, and leave Hartung-Knapp on when you have few studies.",
@@ -122,6 +123,7 @@ ui <- fluidPage(
 
     # ------------------------------ Results -------------------------------
     div(class = "results",
+      uiOutput("ai_review"),
       conditionalPanel("!output.has_data",
         guided_empty("Your forest plot will appear here",
           "Pool the results of several studies in three steps. Everything is checked as you go, and the figure is ready for a manuscript.",
@@ -219,6 +221,7 @@ server <- function(input, output, session) {
   raw <- reactiveVal(NULL)
   detect_msg <- reactiveVal("")
   ai <- ai_server(input, output, session)
+  ai_x <- ai_extract_server(input, output, session, ai, raw, detect_msg)
 
   km_server(input, output, session, forest_raw = raw, forest_note = detect_msg)
   conv_server(input, output, session, forest_raw = raw, forest_note = detect_msg)
@@ -450,7 +453,7 @@ server <- function(input, output, session) {
 
   output$methods_txt <- renderUI({
     f <- fit(); req(isTRUE(f$ok))
-    div(class = "methods-text", enc2utf8(methods_text(f$p, f$k)))
+    div(class = "methods-text", enc2utf8(methods_text(f$p, f$k, ai = ai_x$from_ai())))
   })
   output$results_txt <- renderUI({
     f <- fit(); req(isTRUE(f$ok))
@@ -522,7 +525,7 @@ server <- function(input, output, session) {
       ir <- tryCatch(infl_run(f$env$m, f$p$tau, f$p$hk), error = function(err) NULL)
       if (!is.null(ir) && isTRUE(ir$ok)) utils::write.csv(ir$table, file.path(d, "tables", "influence_diagnostics.csv"), row.names = FALSE)
       if (!is.null(raw())) utils::write.csv(raw()$data, file.path(d, "tables", "data.csv"), row.names = FALSE, na = "")
-      txt <- c("METHODS", methods_text(f$p, f$k), "", "RESULTS", tryCatch(results_text(f$env$m, f$p, f$k), error = function(err) ""), "", "FULL OUTPUT", utils::capture.output(print(f$env$m)))
+      txt <- c("METHODS", methods_text(f$p, f$k, ai = isolate(ai_x$from_ai())), "", "RESULTS", tryCatch(results_text(f$env$m, f$p, f$k), error = function(err) ""), "", "FULL OUTPUT", utils::capture.output(print(f$env$m)))
       writeLines(enc2utf8(txt), file.path(d, "methods_results_and_output.txt"), useBytes = TRUE)
       nm <- if (is.null(f$csv) || !grepl("\\.(csv|txt)$", f$csv, ignore.case = TRUE)) "your_data.csv" else f$csv
       writeLines(build_script(f$code, f$p, nm, f$sep, f$enc, f$w, f$h), file.path(d, "forest_plot_analysis.R"), useBytes = TRUE)

@@ -1,0 +1,17 @@
+{
+  "id": "msg_fig",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-opus-5-5",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"axes\":{\"x\":{\"label\":\"Months since randomisation\",\"scale\":\"linear\",\"unit\":\"months\",\"ticks\":[{\"value\":0,\"px\":106,\"py\":606},{\"value\":12,\"px\":278,\"py\":606},{\"value\":24,\"px\":450,\"py\":606},{\"value\":36,\"px\":622,\"py\":606},{\"value\":48,\"px\":794,\"py\":606},{\"value\":60,\"px\":966,\"py\":606}]},\"y\":{\"label\":\"Overall survival\",\"scale\":\"linear\",\"unit\":\"\",\"ticks\":[{\"value\":0,\"px\":94,\"py\":595},{\"value\":0.2,\"px\":94,\"py\":483},{\"value\":0.4,\"px\":94,\"py\":371},{\"value\":0.6,\"px\":94,\"py\":259},{\"value\":0.8,\"px\":94,\"py\":147},{\"value\":1,\"px\":94,\"py\":35}]},\"y_percent\":false,\"curve_type\":\"survival\"},\"arms\":[{\"label\":\"Intervention\",\"colour_hex\":\"#3366A0\",\"line_style\":\"solid\",\"risk_label\":\"Intervention\"},{\"label\":\"Control\",\"colour_hex\":\"#B23A48\",\"line_style\":\"solid\",\"risk_label\":\"Control\"}],\"risk_table\":{\"times\":[0,12,24,36],\"rows\":[{\"label\":\"Intervention\",\"n\":[250,180,120,60]},{\"label\":\"Control\",\"n\":[248,150,90,null]}]},\"annotations\":{\"hr\":0.75,\"ci_lower\":0.6,\"ci_upper\":0.94,\"p\":\"0.012\",\"hr_text\":\"HR 0.75 (95% CI 0.60-0.94), intervention vs control\",\"reference_arm\":\"Control\"},\"notes\":[\"The number at risk for Control at 36 months is printed as a dash.\"]}"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 3000,
+    "output_tokens": 1200
+  }
+}

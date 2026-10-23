@@ -23,6 +23,7 @@ ui <- fluidPage(
     tags$link(rel = "icon", type = "image/svg+xml", href = "favicon.svg"),
     tags$link(rel = "stylesheet", href = "style.css"),
     tags$script(src = "digitizer.js"),
+    tags$script(src = "dig_ai.js"),
     tags$script(src = "hints.js"),
     tags$script(src = "ui.js"),
     tags$script(HTML("$(document).on('click', '.subnav-btn', function(){ $('input[name=mode][value=' + $(this).data('mode') + ']').click(); });")),
@@ -223,6 +224,7 @@ server <- function(input, output, session) {
   ai <- ai_server(input, output, session)
   ai_lib <- ai_library_server(input, output, session)
   ai_x <- ai_extract_server(input, output, session, ai, raw, detect_msg, library = ai_lib)
+  aifig <- ai_figure_server(input, output, session, ai)
 
   km_server(input, output, session, forest_raw = raw, forest_note = detect_msg)
   conv_server(input, output, session, forest_raw = raw, forest_note = detect_msg)

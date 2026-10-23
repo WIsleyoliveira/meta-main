@@ -87,7 +87,76 @@
     return [e2.r / e2.n, e2.g / e2.n, e2.b / e2.n];
   }
 
+  // ---------------- browser: send the image, apply a reading ----------------
+  function browser() {
+    var $ = function (id) { return document.getElementById(id); };
+    var ready = false;
+    var setVal = function (id, v) { var e = $(id); if (e) { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); } };
+    var dig = function () { return window.KMDigitizer; }, ui = function () { return window.KMDigitizerAPI; };
+    var MAX_SIDE = 1568;
+
+    function refreshButton() { var b = $('aifig_read_btn'); if (b) b.disabled = !ready; }
+    function sendImage() {
+      var S = dig();
+      if (!S || !S.img) { ui().status('Load the figure first, then press Read this figure with AI.', 'err'); return; }
+      var k = Math.min(1, MAX_SIDE / Math.max(S.img.width, S.img.height));
+      var c = document.createElement('canvas'); c.width = Math.round(S.img.width * k); c.height = Math.round(S.img.height * k);
+      c.getContext('2d').drawImage(S.img, 0, 0, c.width, c.height);
+      var b64 = c.toDataURL('image/png').split(',')[1];
+      var study = $('dig_study') ? $('dig_study').value.trim() : '';
+      Shiny.setInputValue('aifig_image', { b64: b64, width: c.width, height: c.height, orig_width: S.img.width, orig_height: S.img.height,
+                                           study: study, nonce: Math.random() }, { priority: 'event' });
+      ui().status('Reading the figure with AI\u2026');
+    }
+
+    function applyAxes(m) {
+      var S = dig(); if (!S || !S.img) return;
+      setVal('dig_xscale', m.xscale); setVal('dig_yscale', m.yscale);   // changing a scale resets the calibration, so do it first
+      var cal = { x1: null, x2: null, y1: null, y2: null }, unsure = [];
+      [['x', m.x], ['y', m.y]].forEach(function (pair) {
+        var axis = pair[0], ticks = pair[1] || [];
+        ticks.slice(0, 2).forEach(function (t, j) {
+          var key = axis + (j + 1), s = snapTick(S.imgData, axis, t.px, t.py);
+          cal[key] = { px: s.px, py: s.py, val: t.value };
+          if (!s.snapped) unsure.push(key);
+          var inp = $('dig_' + key + 'v'); if (inp) inp.value = t.value;
+        });
+      });
+      S.cal = cal; S.calUnsure = unsure; ui().draw();
+      ui().status(unsure.length ? 'Axes set from the AI reading. Check the orange calibration points: they could not be matched to a tick mark (re-set them with the Set buttons if needed).'
+                                : 'Axes set from the AI reading and matched to the tick marks. Check the crosses, then trace.', unsure.length ? '' : 'ok');
+    }
+
+    function applyArm(m) {
+      var S = dig(); if (!S || !S.img) return;
+      $('dig_arm').value = m.label || '';
+      [['dig_tt', m.times], ['dig_nr', m.nrisk], ['dig_hr', m.hr], ['dig_hrlo', m.hrlo], ['dig_hrhi', m.hrhi]].forEach(function (p) { var e = $(p[0]); if (e) e.value = p[1] || ''; });
+      var note = m.note ? ' ' + m.note : '';
+      if (!m.hex) { ui().status('Details filled for ' + m.label + '. The AI gave no colour: pick it on the figure, then trace.' + note); return; }
+      var box = null, c = S.cal;
+      if (ui().calibrated()) {   // the plot area (curves often run a little past the last x tick)
+        var xa = Math.min(c.x1.px, c.x2.px), xb = Math.max(c.x1.px, c.x2.px);
+        box = { x0: xa, x1: xb + 0.2 * (xb - xa), y0: Math.min(c.y1.py, c.y2.py), y1: Math.max(c.y1.py, c.y2.py) };
+      }
+      S.color = nearestColour(S.imgData, m.hex, box || undefined);
+      var sw = $('dig_swatch'); if (sw) sw.style.background = 'rgb(' + S.color.map(Math.round).join(',') + ')';
+      if (!ui().calibrated()) { ui().status('Details and colour set for ' + m.label + '. Calibrate the axes, then press Trace by colour.' + note); return; }
+      ui().trace();
+      var st = $('dig_status'); if (st && note) st.textContent += note;
+    }
+
+    document.addEventListener('click', function (e) { if (e.target && e.target.id === 'aifig_read_btn') sendImage(); });
+    document.addEventListener('dig:image', function () { if (window.Shiny && Shiny.setInputValue) Shiny.setInputValue('aifig_new_image', Math.random()); });
+    var handlers = function () {
+      Shiny.addCustomMessageHandler('aifig_ready', function (m) { ready = !!m.ready; refreshButton(); });
+      Shiny.addCustomMessageHandler('aifig_axes', applyAxes);
+      Shiny.addCustomMessageHandler('aifig_arm', applyArm);
+    };
+    if (window.Shiny && Shiny.addCustomMessageHandler) handlers(); else document.addEventListener('shiny:connected', handlers);
+    document.addEventListener('shiny:value', function (e) { if (e.name === 'aifig_panel') setTimeout(refreshButton, 0); });
+  }
+
   var api = { hexToRgb: hexToRgb, snapTick: snapTick, nearestColour: nearestColour };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
-  if (typeof window !== 'undefined') window.KMDigitizerAI = api;
+  if (typeof window !== 'undefined') { window.KMDigitizerAI = api; browser(); }
 })();

@@ -63,12 +63,13 @@ dig_controls_ui <- function() {
   div(class = "controls",
     step("Load the figure", help = "Choose the image of the figure, or paste a screenshot (Ctrl+V, or Cmd+V on Mac). Then type the study and arm names.",
       tags$input(id = "dig_file", type = "file", accept = "image/*", class = "form-control"),
-      div(class = "aside", "Or paste a screenshot with Ctrl+V (Cmd+V on Mac), or drop an image on the figure. The image stays in your browser and is not uploaded."),
+      div(class = "aside", "Or paste a screenshot with Ctrl+V (Cmd+V on Mac), or drop an image on the figure. The image stays in your browser and is not uploaded, unless you press Read this figure with AI."),
       fluidRow(
         column(6, div(class = "dig-num", tags$label(`for` = "dig_study", "Study name"),
                       tags$input(id = "dig_study", type = "text", class = "form-control", placeholder = "Trial A 2012", autocomplete = "off"))),
         column(6, div(class = "dig-num", tags$label(`for` = "dig_arm", "Arm name"),
-                      tags$input(id = "dig_arm", type = "text", class = "form-control", placeholder = "Intervention", autocomplete = "off"))))
+                      tags$input(id = "dig_arm", type = "text", class = "form-control", placeholder = "Intervention", autocomplete = "off")))),
+      ai_figure_ui()
     ),
     step("Calibrate the axes", help = "Teach the app the axes. Type the value of a tick, press its Set button, then click that tick on the figure. Do it for two ticks on each axis, far apart.",
       tip("Type the value of one tick on each axis, press its button, then click that tick on the figure. Use two ticks that are far apart, such as 0 and the last tick."),

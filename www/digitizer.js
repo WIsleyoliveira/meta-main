@@ -49,10 +49,12 @@
       ctx.moveTo(px * z, py * z - 9); ctx.lineTo(px * z, py * z + 9); ctx.stroke();
       ctx.fillText(label, px * z + 6, py * z - 6);
     }
-    if (c.x1) cross(c.x1.px, c.x1.py, 'X1=' + c.x1.val, '#0a7d3b');
-    if (c.x2) cross(c.x2.px, c.x2.py, 'X2=' + c.x2.val, '#0a7d3b');
-    if (c.y1) cross(c.y1.px, c.y1.py, 'Y1=' + c.y1.val, '#7a3db8');
-    if (c.y2) cross(c.y2.px, c.y2.py, 'Y2=' + c.y2.val, '#7a3db8');
+    // a point placed from the AI reading that could not be snapped onto a tick mark is orange: check it
+    var unsure = function (k, col) { return (S.calUnsure || []).indexOf(k) >= 0 ? '#e07b00' : col; };
+    if (c.x1) cross(c.x1.px, c.x1.py, 'X1=' + c.x1.val, unsure('x1', '#0a7d3b'));
+    if (c.x2) cross(c.x2.px, c.x2.py, 'X2=' + c.x2.val, unsure('x2', '#0a7d3b'));
+    if (c.y1) cross(c.y1.px, c.y1.py, 'Y1=' + c.y1.val, unsure('y1', '#7a3db8'));
+    if (c.y2) cross(c.y2.px, c.y2.py, 'Y2=' + c.y2.val, unsure('y2', '#7a3db8'));
     if (S.box) {
       ctx.setLineDash([6, 4]); ctx.strokeStyle = '#d98200';
       ctx.strokeRect(S.box.x0 * z, S.box.y0 * z, (S.box.x1 - S.box.x0) * z, (S.box.y1 - S.box.y0) * z);
@@ -97,11 +99,12 @@
       S.img = img; S.name = name || '';
       off.width = img.width; off.height = img.height; octx.drawImage(img, 0, 0);
       S.imgData = octx.getImageData(0, 0, img.width, img.height);
-      S.cal = { x1: null, x2: null, y1: null, y2: null }; S.pts = []; S.masks = []; S.box = null; S.boxFirst = null; S.color = null;
+      S.cal = { x1: null, x2: null, y1: null, y2: null }; S.calUnsure = []; S.pts = []; S.masks = []; S.box = null; S.boxFirst = null; S.color = null;
       var sw = $('dig_swatch'); if (sw) sw.style.background = 'transparent';
       $('dig_empty').style.display = 'none';
       fit();
       status('Image loaded. Next: calibrate the axes (step 2).', 'ok');
+      document.dispatchEvent(new CustomEvent('dig:image'));   // an AI reading of the previous image no longer applies
     };
     img.onerror = function () { status('That file could not be read as an image. Use PNG, JPG or a screenshot.', 'err'); };
     img.src = url;
@@ -130,7 +133,7 @@
       var v = num('dig_' + k + 'v');
       if (isNaN(v)) { status('Type the value of this axis point first (box next to the button), then click the figure.', 'err'); return; }
       if (isLog(k.charAt(0)) && v <= 0) { status('A logarithmic axis needs a value above zero.', 'err'); return; }
-      S.cal[k] = { px: p.px, py: p.py, val: v };
+      S.cal[k] = { px: p.px, py: p.py, val: v }; S.calUnsure = (S.calUnsure || []).filter(function (u) { return u !== k; });
       setMode('none'); draw();
       status(calibrated() ? 'Axes calibrated. Next: trace the curve (step 3).' : 'Point ' + k.toUpperCase() + ' set.', 'ok');
     } else if (m === 'add') {
@@ -418,4 +421,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
   window.KMDigitizer = S;   // handy for debugging and tests
+  window.KMDigitizerAPI = { draw: draw, trace: trace, status: status, calibrated: calibrated };   // used by dig_ai.js
 })();

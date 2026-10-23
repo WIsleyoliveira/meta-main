@@ -96,3 +96,44 @@ ai_figure_scale <- function(m, factor) {
   for (ax in c("x", "y")) m$axes[[ax]]$ticks <- lapply(m$axes[[ax]]$ticks %||% list(), function(t) { t$px <- t$px * factor; t$py <- t$py * factor; t })
   m
 }
+
+# The calibration to apply: scales, curve type, and the two ticks farthest apart on each axis (most precise).
+# A percent axis whose ticks were read as 0-1 is put back on 0-100, as the digitizer reads Y as printed.
+ai_figure_axes <- function(m) {
+  far2 <- function(tk) {
+    v <- vapply(tk, function(t) as.numeric(t$value), 0)
+    if (length(v) < 2) return(tk)
+    tk[c(which.min(v), which.max(v))]
+  }
+  y <- far2(m$axes$y$ticks %||% list())
+  if (isTRUE(m$axes$y_percent) && length(y) && max(vapply(y, function(t) as.numeric(t$value), 0)) <= 1)
+    y <- lapply(y, function(t) { t$value <- t$value * 100; t })
+  list(xscale = m$axes$x$scale %||% "linear", yscale = m$axes$y$scale %||% "linear", y_percent = isTRUE(m$axes$y_percent),
+       curve_type = m$axes$curve_type %||% "survival", x = far2(m$axes$x$ticks %||% list()), y = y)
+}
+
+# The details of one arm for the digitizer fields. The HR goes to the experimental arm only: the arm that is not the reference.
+ai_figure_arm <- function(m, i) {
+  a <- m$arms[[i]]; note <- character(0)
+  key <- tolower(trimws(c(a$risk_label %||% "", a$label %||% "")))
+  row <- Filter(function(r) tolower(trimws(r$label)) %in% key[nzchar(key)], m$risk_table$rows %||% list())
+  times <- vapply(m$risk_table$times %||% list(), as.numeric, 0)
+  tt <- character(0); nr <- character(0)
+  if (length(row)) {
+    n <- vapply(row[[1]]$n, function(v) if (is.null(v)) NA_real_ else as.numeric(v), 0)
+    keep <- !is.na(n) & seq_along(n) <= length(times)
+    if (any(!keep[seq_along(n)])) note <- c(note, sprintf("No number at risk at time %s (left out).", paste(times[seq_along(n)][!keep], collapse = ", ")))
+    tt <- format(times[seq_along(n)][keep], trim = TRUE, drop0trailing = TRUE); nr <- format(n[keep], trim = TRUE)
+  } else if (!is.null(m$risk_table)) note <- c(note, "No row of the risk table matches this arm.")
+  an <- m$annotations; ref <- tolower(trimws(an$reference_arm %||% ""))
+  give_hr <- !is.null(an$hr) && nzchar(ref) && !(ref %in% tolower(trimws(a$label %||% "")))
+  if (!is.null(an$hr) && !nzchar(ref)) note <- c(note, "The figure does not say which arm is the reference, so its HR was not filled in.")
+  s <- function(x) if (is.null(x)) "" else as.character(x)
+  list(label = a$label %||% paste("Curve", i), times = paste(tt, collapse = ", "), nrisk = paste(nr, collapse = ", "),
+       hr = if (give_hr) s(an$hr) else "", hrlo = if (give_hr) s(an$ci_lower) else "", hrhi = if (give_hr) s(an$ci_upper) else "",
+       hex = a$colour_hex %||% "", note = paste(note, collapse = " "))
+}
+
+# The background job: plain values in, plain values out
+ai_figure_job <- function(job, transport = ai_http_transport)
+  ai_figure_read(job$b64, job$width, job$height, job$study, job$key, job$model, transport = transport)

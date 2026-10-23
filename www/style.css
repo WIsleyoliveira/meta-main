@@ -610,3 +610,13 @@ table.airob-q blockquote { font-family: "Literata", Georgia, serif; margin: 0.3r
 .airob-override[open] { display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; }
 .airob-override select, .airob-override input { width: auto; min-width: 10rem; }
 @media print { .airob-override, .airob-answer { display: none !important; } }
+
+/* ---------- AI reading of a figure (digitizer) ---------- */
+.aifig-panel { margin-top: 0.6rem; font-size: 0.88rem; }
+.aifig-axes { padding: 0.5rem 0; border-bottom: 1px solid var(--rule); margin-bottom: 0.5rem; }
+.aifig-axes .btn { margin-top: 0.4rem; }
+table.aifig-arms { width: 100%; border-collapse: collapse; margin: 0.3rem 0 0.5rem; }
+table.aifig-arms th { font-weight: 600; font-size: 0.8rem; color: var(--muted); text-align: left; padding: 0.2rem; }
+table.aifig-arms td { padding: 0.25rem 0.2rem; border-top: 1px solid #EEF1F4; vertical-align: middle; }
+.aifig-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 2px; border: 1px solid var(--rule); background: transparent; }
+.aifig-hr { margin: 0.4rem 0; }

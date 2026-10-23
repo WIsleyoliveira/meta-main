@@ -54,3 +54,64 @@ stopifnot(s2$axes$x$ticks[[2]]$px == 2 * base$axes$x$ticks[[2]]$px, s2$axes$y$ti
 ok("scale positions to the original image")
 
 cat("AI FIGURE TESTS PASSED\n")
+
+# ==================== the digitizer's AI block in the Shiny server ====================
+suppressMessages({ library(shiny); library(meta) })
+app <- shinyAppDir(".")
+html <- function(x) paste(as.character(x$html %||% x), collapse = "")
+Sys.unsetenv(c("ANTHROPIC_API_KEY", "PONDERIS_AI_MAX_CALLS"))
+ready_ai <- function(session) session$setInputs(ai_key = "sk-ant-x", ai_save_key = 1, ai_consent = TRUE)
+options(ponderis.ai_runner = "sync")
+seq_transport <- function(...) { answers <- list(...); n <- 0
+  f <- function(body, key) { n <<- n + 1; a <- answers[[min(n, length(answers))]]
+    if (is.numeric(a)) list(status = as.integer(a), body_text = "") else list(status = 200L, body_text = fx(a)) }
+  environment(f)$count <- function() n; f }
+img_event <- function(nonce = 1, width = 1000) list(b64 = "QUJD", width = width, height = 700 * width / 1000, orig_width = 1000, orig_height = 700, study = "Trial S", nonce = nonce)
+
+tr <- seq_transport("figure_two_arms.json"); options(ponderis.ai_transport = tr)
+testServer(app, {
+  session$setInputs(aifig_image = img_event())
+  stopifnot(environment(tr)$count() == 0, grepl("API key", html(output$aifig_reason)), is.null(aifig$reading()))
+  ok("not ready: nothing sent")
+
+  ready_ai(session)
+  session$setInputs(aifig_image = img_event(2))
+  rd <- aifig$reading()
+  stopifnot(environment(tr)$count() == 1, length(rd$reading$arms) == 2, grepl("Intervention", html(output$aifig_panel)),
+            grepl("0.75", html(output$aifig_panel)), grepl("dash or blank", html(output$aifig_panel)), grepl("1 AI call", output$ai_usage))
+  ok("reading shown with warnings and usage counted")
+
+  session$setInputs(aifig_use_axes = 1)
+  ax <- aifig$sent()$aifig_axes
+  stopifnot(ax$xscale == "linear", ax$curve_type == "survival", length(ax$x) == 2, length(ax$y) == 2,
+            ax$x[[1]]$value == 0, ax$x[[2]]$value == 60, ax$y[[1]]$value == 0, ax$y[[2]]$value == 1,
+            abs(ax$x[[2]]$px - (960 + 6)) < 1e-9)
+  ok("use these axes: the two farthest ticks per axis")
+
+  session$setInputs(aifig_use_arm = list(i = 1, nonce = 1))
+  arm <- aifig$sent()$aifig_arm
+  stopifnot(arm$label == "Intervention", arm$times == "0, 12, 24, 36", arm$nrisk == "250, 180, 120, 60", arm$hex == "#3366A0",
+            arm$hr == "0.75", arm$hrlo == "0.6", arm$hrhi == "0.94")
+  session$setInputs(aifig_use_arm = list(i = 2, nonce = 2))
+  arm <- aifig$sent()$aifig_arm
+  stopifnot(arm$label == "Control", arm$times == "0, 12, 24", arm$nrisk == "248, 150, 90", arm$hr == "", grepl("36", arm$note))
+  ok("use this arm: details, colour, HR only for the experimental arm")
+
+  session$setInputs(aifig_new_image = 3)
+  stopifnot(is.null(aifig$reading()), !grepl("Use these axes", html(output$aifig_panel)))
+  ok("a new image clears the reading")
+})
+
+# percent axis: tick values read as 0-1 on a 0-100 axis are put back on 0-100
+tr <- seq_transport("figure_two_arms.json"); options(ponderis.ai_transport = tr)
+testServer(app, {
+  ready_ai(session)
+  session$setInputs(aifig_image = img_event(1, width = 500))
+  m <- aifig$reading()$reading; m$axes$y_percent <- TRUE
+  stopifnot(identical(ai_figure_axes(m)$y[[2]]$value, 100), ai_figure_axes(aifig$reading()$reading)$y[[2]]$value == 1)
+  session$setInputs(aifig_use_axes = 1)
+  stopifnot(abs(aifig$sent()$aifig_axes$x[[2]]$px - 2 * (960 + 6)) < 1e-9)   # read on a half-size image, applied on the original
+  ok("percent axis and scaling to the original image")
+})
+
+cat("AI FIGURE APP TESTS PASSED\n")

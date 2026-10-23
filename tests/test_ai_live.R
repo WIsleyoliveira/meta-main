@@ -1,9 +1,9 @@
-# Two real calls to the Claude API (a few cents): PDF extraction and a RoB 2 assessment. Runs only when asked:
+# Three real calls to the Claude API (a few cents): PDF extraction, a RoB 2 assessment and a figure reading. Runs only when asked:
 #   PONDERIS_AI_LIVE=1 ANTHROPIC_API_KEY=sk-ant-... Rscript tests/test_ai_live.R
 source("R/helpers.R")
 source("R/ai_client.R")
 source("R/ai_extract.R")
-source("R/review_helpers.R"); source("R/rob_questions.R"); source("R/rob_algorithms.R"); source("R/ai_rob.R")
+source("R/review_helpers.R"); source("R/rob_questions.R"); source("R/rob_algorithms.R"); source("R/ai_rob.R"); source("R/ai_figure.R")
 
 key <- Sys.getenv("ANTHROPIC_API_KEY")
 if (Sys.getenv("PONDERIS_AI_LIVE") != "1" || !nzchar(key)) {
@@ -47,4 +47,25 @@ if (!isTRUE(rr$ok)) stop("live RoB call failed: ", rr$message)
 jj <- rob_judge("rob2", "assignment", setNames(rr$answers$answer, rr$answers$id))
 print(rr$answers[rr$answers$domain == 1, c("id", "answer", "status")])
 stopifnot(rr$answers$answer[rr$answers$id == "1.1"] %in% c("N", "PN"), jj$domains[["D1"]] == "High")
+
+# Figure: a Kaplan-Meier plot with a numbers-at-risk table -> the table read exactly
+h <- tempfile(fileext = ".png")
+ragg::agg_png(h, width = 1000, height = 760, res = 100)
+par(mar = c(9, 5, 2, 2))
+tt <- seq(0, 36, 0.25)
+plot(NA, xlim = c(0, 36), ylim = c(0, 1), xaxs = "i", yaxs = "i", axes = FALSE, xlab = "Months", ylab = "Overall survival")
+axis(1, at = seq(0, 36, 12)); axis(2, at = seq(0, 1, 0.2), las = 1); box()
+lines(tt, exp(-0.02 * tt), type = "s", col = "#2F5D8A", lwd = 3); lines(tt, exp(-0.04 * tt), type = "s", col = "#B23A48", lwd = 3)
+legend("topright", c("Drug B", "Usual care"), col = c("#2F5D8A", "#B23A48"), lwd = 3, bty = "n")
+text(30, 0.9, "HR 0.52 (95% CI 0.38-0.71)")
+mtext("No. at risk", side = 1, line = 4, adj = 0)
+mtext("Drug B", side = 1, line = 5, at = -6, adj = 0); mtext(c(210, 165, 128, 97), side = 1, line = 5, at = seq(0, 36, 12))
+mtext("Usual care", side = 1, line = 6, at = -6, adj = 0); mtext(c(205, 130, 82, 49), side = 1, line = 6, at = seq(0, 36, 12))
+grDevices::dev.off()
+rf <- ai_figure_read(jsonlite::base64_enc(readBin(h, "raw", file.size(h))), 1000, 760, "Trial Q 2022", key, "claude-sonnet-5-5")
+if (!isTRUE(rf$ok)) stop("live figure call failed: ", rf$message)
+rows <- rf$reading$risk_table$rows; nums <- function(lbl) unlist(Filter(function(r) grepl(lbl, r$label), rows)[[1]]$n)
+print(rf$warnings)
+stopifnot(all(unlist(rf$reading$risk_table$times) == c(0, 12, 24, 36)), all(nums("Drug") == c(210, 165, 128, 97)), all(nums("Usual") == c(205, 130, 82, 49)),
+          length(rf$reading$arms) == 2, isTRUE(all.equal(rf$reading$annotations$hr, 0.52)))
 cat("AI LIVE TEST PASSED\n")

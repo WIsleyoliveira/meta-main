@@ -154,6 +154,9 @@ R/rob_questions.R     risk of bias: RoB 2 and ROBINS-I V2 signalling questions (
 R/rob_algorithms.R    risk of bias: the tools' algorithms from answers to judgements
 R/ai_rob.R            AI: risk-of-bias request, parsing and quote check
 R/ai_rob_module.R     AI: "Assess with AI" in the Risk of bias tab (review cards, overrides, apply, exports)
+R/ai_figure.R         AI: reading a Kaplan-Meier figure (schema, prompt, checks of the reading)
+R/ai_figure_module.R  AI: "Read this figure with AI" in the digitizer
+www/dig_ai.js         digitizer: sending the image, snapping ticks onto the image, applying axes and arms
 www/style.css         look and feel
 install_packages.R    one-time package install
 tests/                headless tests (see below)
@@ -217,6 +220,21 @@ The question texts are reproduced verbatim from the RoB 2 and ROBINS-I V2 cribsh
 cite Sterne et al., BMJ 2019;366:l4898 (RoB 2) and ROBINS-I V2. Commercial use of these texts needs the authors' permission.
 Code: `R/rob_questions.R`, `R/rob_algorithms.R`, `R/ai_rob.R`, `R/ai_rob_module.R`, `R/ai_library.R` (the session PDF library).
 
+## Reading Kaplan-Meier figures with AI (optional)
+
+In Survival curves → Digitize curves, after loading a figure, **Read this figure with AI** sends that image (scaled to at most 1568 px)
+to Claude once and shows what is printed on it: the axes (tick values, scale, Y in percent or not, survival or cumulative incidence),
+the arms in the legend with their colours, the numbers-at-risk table and a hazard ratio printed on the figure. Without that click the image
+never leaves the browser, as before.
+
+- **Use these axes** sets the scales and the four calibration points. The AI's tick positions are snapped onto the tick marks of the image
+  (within about half a pixel on test figures); a point that cannot be matched to a tick mark is shown in orange to check or re-set.
+- **Use this arm** fills the arm name, the times and numbers at risk, and the published HR on the experimental arm, takes the curve's real
+  colour from the image and runs the usual **Trace by colour**. The AI never traces curves: the validated digitizer does. Check the points and Save as usual.
+- The reading is checked in code (times increasing, numbers at risk never increasing, rows matching the legend, ticks in order, HR inside its CI) and
+  the problems are listed above it.
+Code: `R/ai_figure.R`, `R/ai_figure_module.R`, `www/dig_ai.js`.
+
 ## Navigation
 
 Five entries in the top bar, grouped by what you are doing: Meta-analysis (forest plot, bias, regression), Survival curves step 1 (digitize and compare curves) and step 2 (pooled Kaplan-Meier analysis), Review tools, and the median/IQR calculator. In the digitizer the right side has two tabs: Figure (stays in view while you use the controls on the left) and Saved curves and comparisons.
@@ -235,7 +253,9 @@ Rscript tests/test_ai.R       # AI client, schema, parsing and local verificatio
 Rscript tests/test_ai_app.R   # AI panel and PDF extraction in the Shiny server (fake API)
 Rscript tests/test_rob_algorithms.R # RoB 2 tables row by row, every ROBINS-I V2 flowchart path
 Rscript tests/test_ai_rob.R   # risk-of-bias assistant: schema, parsing, quote check, the tab in the Shiny server (fake API)
-Rscript tests/test_ai_live.R  # two real API calls; runs only with PONDERIS_AI_LIVE=1 and ANTHROPIC_API_KEY set
+Rscript tests/test_ai_figure.R # figure reading: schema, checks, the digitizer's AI block in the Shiny server (fake API)
+node tests/test_dig_snap.js   # snapping tick positions and finding curve colours on synthetic images (no browser)
+Rscript tests/test_ai_live.R  # three real API calls; runs only with PONDERIS_AI_LIVE=1 and ANTHROPIC_API_KEY set
 ```
 
 Run them from this folder.

@@ -20,7 +20,8 @@ for (tv in list(c("rob2", "assignment"), c("rob2", "adherence"), c("robins2", "A
   walk(sc, function(x) if (is.list(x) && identical(x$type, "object")) stopifnot(identical(x$additionalProperties, FALSE), setequal(unlist(x$required), names(x$properties))))
   bad <- character(0); walk(sc, function(x) if (is.list(x)) bad <<- c(bad, intersect(names(x), c("minimum", "maximum", "minLength", "maxLength"))))
   stopifnot(!length(bad), identical(names(sc$properties$answers$properties), vapply(bank, `[[`, "", "id")))
-  for (q in bank) stopifnot(setequal(unlist(sc$properties$answers$properties[[q$id]]$properties$answer$enum), union(q$answers, "NA")))
+  for (q in bank) stopifnot(setequal(unlist(sc$properties$answers$properties[[q$id]]$properties$answer$enum),
+                                     if (is.null(q$when)) q$answers else union(q$answers, "NA")))
 }
 ok("schema strict for every tool and variant")
 
@@ -32,6 +33,9 @@ ut <- ai_rob_user_text(list(outcome = "30-day mortality", result = "RR 0.80", ef
 stopifnot(grepl("Smith 2019", ut), grepl("30-day mortality", ut), grepl("RR 0.80", ut), grepl("assignment", ut))
 ut <- ai_rob_user_text(list(outcome = "stroke", confounders = "age; diabetes", cointerventions = "statins"), "Lee 2020", tool = "robins2")
 stopifnot(grepl("age; diabetes", ut), grepl("statins", ut))
+stopifnot(grepl("intention-to-treat", ai_rob_user_text(list(effect = "A"), "Lee 2020", tool = "robins2")),
+          grepl("per-protocol", ai_rob_user_text(list(effect = "B"), "Lee 2020", tool = "robins2")))
+stopifnot(ai_rob_hex("Smith 2019") != ai_rob_hex("Smith-2019"), grepl("^[0-9a-f]+$", ai_rob_hex("Smith 2019 \u00e9")))
 ok("prompt names questions, settings and study")
 
 # ---- one study ----
@@ -96,6 +100,8 @@ seq_transport <- function(...) { answers <- list(...); n <- 0; bodies <- list()
     if (is.numeric(a)) list(status = as.integer(a), body_text = "") else list(status = 200L, body_text = fx(a)) }
   environment(f)$count <- function() n; environment(f)$sent <- function() bodies; f }
 n_calls <- function(tr) environment(tr)$count()
+pdf_in <- function(study) paste0("airob_pdf_", ai_rob_hex(study))
+link <- function(session, ...) { x <- list(...); do.call(session$setInputs, setNames(unname(x), vapply(names(x), pdf_in, ""))) }
 Sys.unsetenv(c("ANTHROPIC_API_KEY", "PONDERIS_AI_MAX_CALLS"))
 ready_ai <- function(session) session$setInputs(ai_key = "sk-ant-x", ai_save_key = 1, ai_consent = TRUE)
 options(ponderis.ai_runner = "sync")
@@ -109,7 +115,7 @@ tr <- seq_transport("rob2_alternation.json", 529)
 options(ponderis.ai_transport = tr)
 testServer(app, {
   ids <- start(session, ai_lib)
-  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[2], airob_run = 1)
+  link(session, `Smith 2019` = ids[1], `Jones 2020` = ids[2]); session$setInputs(airob_run = 1)
   as <- rev$airob$assessments()
   stopifnot(n_calls(tr) == 2, isTRUE(as[["rob2|Smith 2019"]]$ok), identical(as[["rob2|Jones 2020"]]$ok, FALSE))
   e <- html(output$airob_errors); cards <- html(output$airob_cards)
@@ -160,7 +166,7 @@ tr <- seq_transport("rob2_alternation.json", "rob2_alternation.json")
 options(ponderis.ai_transport = tr)
 testServer(app, {
   ids <- start(session, ai_lib, n_pdf = 1)
-  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[1], airob_run = 1)
+  link(session, `Smith 2019` = ids[1], `Jones 2020` = ids[1]); session$setInputs(airob_run = 1)
   b <- environment(tr)$sent()
   stopifnot(n_calls(tr) == 2, grepl("Smith 2019", b[[1]]$messages[[1]]$content[[2]]$text), grepl("Jones 2020", b[[2]]$messages[[1]]$content[[2]]$text))
   ok("one PDF for two studies")
@@ -170,7 +176,7 @@ pending <- list()
 options(ponderis.ai_runner = function(job, done) pending[[length(pending) + 1]] <<- list(job = job, done = done))
 testServer(app, {
   ids <- start(session, ai_lib)
-  session$setInputs(airob_pdf_1 = ids[1], airob_pdf_2 = ids[2], airob_run = 1)
+  link(session, `Smith 2019` = ids[1], `Jones 2020` = ids[2]); session$setInputs(airob_run = 1)
   stopifnot(length(pending) == 1)
   session$setInputs(airob_discard = 1)
   pending[[1]]$done(list(ok = FALSE, error = "network", message = "late", called = TRUE))
@@ -188,6 +194,42 @@ testServer(app, {
   session$setInputs(rob_tool = "nos")
   stopifnot(grepl("RoB 2 and ROBINS-I V2", html(output$airob_reason)))
   ok("disabled when not ready or tool not covered")
+})
+
+# ---- review fixes ----
+# a question with no NI option that has no valid answer shows "answer needed", never a wrong selected value
+tr <- seq_transport("robins2_b3_critical.json")
+options(ponderis.ai_transport = tr)
+testServer(app, {
+  ready_ai(session)
+  session$setInputs(rob_tool = "robins2", rob_studies = "Lee 2020", airob_variant = "A", airob_outcome = "stroke", airob_pdfs = pdfs(1))
+  link(session, `Lee 2020` = ai_lib$entries()[[1]]$id); session$setInputs(airob_run = 1)
+  cards <- html(output$airob_cards)
+  sel14 <- regmatches(cards, regexpr('id: \\&quot;1.4\\&quot;[^<]*>(<option[^>]*>[^<]*</option>)+', cards))
+  if (!length(sel14)) sel14 <- regmatches(cards, regexpr("1\\.4[^<]*</td>.*?</select>", cards))
+  stopifnot(grepl("answer needed", cards), length(sel14) == 1, grepl('selected[^>]*>[^<]*answer needed', sel14))
+  csv <- read.csv(output$dl_airob_csv, stringsAsFactors = FALSE)
+  stopifnot(csv$answer[csv$question_id == "1.4"] == "", isTRUE(csv$needs_answer[csv$question_id == "1.4"]))
+  ok("question without NI shows answer needed")
+
+  # Critical from B3 reaches the table, the figure and GRADE
+  stopifnot(rev$airob$final("robins2|Lee 2020")[["D5"]] == "Critical")
+  session$setInputs(airob_apply = 1)
+  d <- rev$rob_data()
+  stopifnot(d$D5[1] == "Critical", rob_overall(d, "robins2") == "Critical")
+  ok("preliminary Critical carried to the table")
+})
+
+# the PDF choice follows the study name, not its line in the list
+tr <- seq_transport("rob2_alternation.json")
+options(ponderis.ai_transport = tr)
+testServer(app, {
+  ids <- start(session, ai_lib, studies = "Alpha 2019\nBeta 2020", n_pdf = 2)
+  link(session, `Alpha 2019` = ids[1], `Beta 2020` = ids[2])
+  session$setInputs(rob_studies = "Beta 2020", airob_run = 1)
+  a <- rev$airob$assessments()
+  stopifnot(names(a) == "rob2|Beta 2020", a[[1]]$pdf_name == "trial2.pdf", n_calls(tr) == 1)
+  ok("PDF choice keyed by study name")
 })
 
 cat("AI ROB APP TESTS PASSED\n")

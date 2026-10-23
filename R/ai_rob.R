@@ -9,10 +9,16 @@ ROB2_DEVIATIONS <- c(nonprotocol = "occurrence of non-protocol interventions",
 
 ai_rob_bank <- function(tool, variant) rob_bank(tool, variant)
 
+# A safe, collision-free id part for a study name (hex of its UTF-8 bytes)
+ai_rob_hex <- function(x) paste(sprintf("%02x", as.integer(charToRaw(enc2utf8(as.character(x))))), collapse = "")
+
+# An answer the reviewer still has to give: no valid code (only possible for questions without NI, such as 1.4 or 4.11)
+ai_rob_needs_answer <- function(q, eff) !(eff %in% union(q$answers, if (!is.null(q$when)) "NA"))
+
 ai_rob_schema <- function(tool, variant) {
   bank <- ai_rob_bank(tool, variant)
   cell <- function(q) list(type = "object", additionalProperties = FALSE, required = list("answer", "page", "quote", "rationale"),
-    properties = list(answer = list(type = "string", enum = as.list(union(q$answers, "NA"))),
+    properties = list(answer = list(type = "string", enum = as.list(if (is.null(q$when)) q$answers else union(q$answers, "NA"))),
                       page = list(anyOf = list(list(type = "integer"), list(type = "null"))),
                       quote = list(type = "string"), rationale = list(type = "string")))
   props <- setNames(lapply(bank, cell), vapply(bank, `[[`, "", "id"))
@@ -49,7 +55,9 @@ ai_rob_user_text <- function(settings, study, tool = "rob2") {
                               else "the effect of assignment to intervention (the 'intention-to-treat' effect)", "\n",
       if (identical(s$effect, "adherence") && length(s$deviations))
         paste0("Deviations to address: ", paste(ROB2_DEVIATIONS[intersect(s$deviations, names(ROB2_DEVIATIONS))], collapse = "; "), "\n") else "")
-    else paste0(line("Important confounding factors (from the review protocol)", s$confounders),
+    else paste0("The analysis estimates: ", if (identical(s$effect, "B")) "the per-protocol effect (Variant B of Domain 1)"
+                else "the intention-to-treat effect (Variant A of Domain 1)", "\n",
+                line("Important confounding factors (from the review protocol)", s$confounders),
                 line("Important co-interventions", s$cointerventions)),
     line("Reviewer's notes", s$notes))
 }

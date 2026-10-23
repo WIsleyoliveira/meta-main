@@ -63,8 +63,8 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
   observeEvent(input$airob_pdfs, { f <- input$airob_pdfs; if (!is.null(f) && nrow(f)) library$add(f) })
 
   # which PDF each study uses: the reviewer's choice, else the PDF the extraction linked to that study
-  pdf_for <- function(i, study) {
-    v <- input[[paste0("airob_pdf_", i)]]
+  pdf_for <- function(study) {
+    v <- input[[paste0("airob_pdf_", ai_rob_hex(study))]]
     if (!is.null(v) && nzchar(v)) return(v)
     hit <- Filter(function(e) identical(tolower(e$study), tolower(study)), library$entries())
     if (length(hit)) hit[[1]]$id else ""
@@ -74,8 +74,8 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
     if (!length(st)) return(div(class = "aside", "Add the studies above, then choose each one's PDF here."))
     if (!length(e)) return(div(class = "aside", "No PDFs yet: add them here or in the forest-plot extraction."))
     ch <- c("No PDF" = "", setNames(vapply(e, `[[`, "", "id"), vapply(e, `[[`, "", "name")))
-    tagList(lapply(seq_along(st), function(i) selectInput(paste0("airob_pdf_", i), paste("PDF for", st[i]), ch,
-                                                           selected = isolate(pdf_for(i, st[i])), width = "100%", selectize = FALSE)))
+    tagList(lapply(st, function(x) selectInput(paste0("airob_pdf_", ai_rob_hex(x)), paste("PDF for", x), ch,
+                                                 selected = isolate(pdf_for(x)), width = "100%", selectize = FALSE)))
   })
 
   set_as <- function(k, x) { a <- assessments(); a[[k]] <- x; assessments(a) }
@@ -108,7 +108,7 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
     for (i in seq_along(st)) {
       k <- ai_rob_key(tool, st[i])
       if (!is.null(keys_only) && !k %in% keys_only) next
-      e <- library$get(pdf_for(i, st[i]))
+      e <- library$get(pdf_for(st[i]))
       if (is.null(e)) { skipped <- c(skipped, st[i]); next }
       jobs[[k]] <- list(path = e$path, pdf_name = e$name, pages = e$pages, study = st[i], tool = tool, variant = variant(), settings = settings())
     }
@@ -132,7 +132,14 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
   final <- function(k) {
     j <- judgement(k); if (is.null(j)) return(NULL)
     ov <- isolate(assessments())[[k]]$overrides
-    d <- j$domains; for (dn in names(ov)) d[[dn]] <- ov[[dn]]$level
+    d <- j$domains
+    # ROBINS-I V2: B2 (confounding) or B3 (measurement of the outcome) Yes -> Critical, carried into that domain so the
+    # worst-domain overall of the table, the figure and GRADE is Critical too
+    if (isTRUE(j$critical_prelim)) {
+      if (rob_is(j$answers, "B2", c("Y", "PY"))) d[["D1"]] <- "Critical"
+      if (rob_is(j$answers, "B3", c("Y", "PY"))) d[["D5"]] <- "Critical"
+    }
+    for (dn in names(ov)) d[[dn]] <- ov[[dn]]$level
     c(d, Overall = if (isTRUE(j$critical_prelim)) "Critical" else if (isolate(assessments())[[k]]$tool == "rob2") rob2_overall(d) else robins2_overall(d))
   }
   observeEvent(input$airob_answer, {
@@ -187,13 +194,15 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
 
   answer_select <- function(k, q, current) {
     opts <- union(q$answers, if (!is.null(q$when)) "NA")
-    tags$select(class = "form-select form-select-sm airob-answer",
+    need <- !(current %in% opts)
+    tags$select(class = "form-select form-select-sm airob-answer", `data-qid` = q$id,
       onchange = sprintf("Shiny.setInputValue('airob_answer', {study: %s, id: %s, answer: this.value}, {priority: 'event'})",
                          jsonlite::toJSON(k, auto_unbox = TRUE), jsonlite::toJSON(q$id, auto_unbox = TRUE)),
+      if (need) tags$option(value = "", selected = NA, disabled = NA, "\u2014 answer needed (counted as No) \u2014"),
       lapply(opts, function(o) tags$option(value = o, selected = if (identical(o, current)) NA else NULL, paste0(o, " \u2013 ", ROB_ANS_LABEL[[o]]))))
   }
   override_form <- function(k, a, dn) {
-    id <- paste0("airob_ov_", ai_rob_slug(k), "_", dn)
+    id <- paste0("airob_ov_", ai_rob_hex(k), "_", dn)
     js <- sprintf("Shiny.setInputValue('airob_override', {study: %s, domain: '%s', level: document.getElementById('%s_l').value, reason: document.getElementById('%s_r').value}, {priority: 'event'})",
                   jsonlite::toJSON(k, auto_unbox = TRUE), dn, id, id)
     ov <- a$overrides[[dn]]
@@ -259,7 +268,9 @@ ai_rob_server <- function(input, output, session, ai, library, rob_names, rob_to
     do.call(rbind, lapply(names(as), function(k) {
       a <- as[[k]]; j <- judgement(k); bank <- rob_bank(a$tool, a$variant)
       data.frame(study = a$study, tool = a$tool, variant = a$variant, domain = a$answers$domain, question_id = a$answers$id,
-                 question = vapply(bank, `[[`, "", "text"), answer = unname(j$answers[a$answers$id]), ai_answer = a$answers$ai_answer,
+                 question = vapply(bank, `[[`, "", "text"),
+                 answer = ifelse(need <- vapply(seq_along(bank), function(i) ai_rob_needs_answer(bank[[i]], j$answers[[bank[[i]]$id]]), TRUE), "", unname(j$answers[a$answers$id])),
+                 needs_answer = need, ai_answer = a$answers$ai_answer,
                  edited = a$answers$edited, page = a$answers$page, quote = a$answers$quote, rationale = a$answers$rationale,
                  status = a$answers$status, stringsAsFactors = FALSE, row.names = NULL)
     }))

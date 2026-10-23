@@ -53,6 +53,20 @@ s2 <- ai_figure_scale(base, 2)
 stopifnot(s2$axes$x$ticks[[2]]$px == 2 * base$axes$x$ticks[[2]]$px, s2$axes$y$ticks[[3]]$py == 2 * base$axes$y$ticks[[3]]$py)
 ok("scale positions to the original image")
 
+# review fixes (plain functions)
+ax <- ai_figure_axes(base)
+stopifnot(ax$start == "top", length(ax$x_all) == 6, length(ax$y_all) == 6)
+m <- base; m$axes$curve_type <- "cumulative"; stopifnot(ai_figure_axes(m)$start == "bottom")
+m <- base; m$axes$y_percent <- TRUE; stopifnot(max(vapply(ai_figure_axes(m)$y_all, function(t) t$value, 0)) == 100)
+a1 <- ai_figure_arm(base, 1)
+stopifnot(a1$n == "250", identical(a1$others, list("#B23A48")))
+m <- base; m$arms[[1]]$colour_hex <- "red"; stopifnot(ai_figure_arm(m, 1)$hex == "")
+m <- base; m$arms[[1]]$colour_hex <- "#3366A0FF"; stopifnot(ai_figure_arm(m, 1)$hex == "")
+m <- base; m$arms[[2]]$label <- "Control (n=248)"; m$arms[[2]]$risk_label <- "Control"
+stopifnot(ai_figure_arm(m, 2)$hr == "", ai_figure_arm(m, 1)$hr == "0.75")
+m <- base; m$annotations$reference_arm <- "control group"; stopifnot(ai_figure_arm(m, 2)$hr == "", ai_figure_arm(m, 1)$hr == "0.75")
+ok("review fixes: start, all ticks, colours, n at time 0, reference arm")
+
 cat("AI FIGURE TESTS PASSED\n")
 
 # ==================== the digitizer's AI block in the Shiny server ====================

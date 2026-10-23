@@ -105,11 +105,14 @@ ai_figure_axes <- function(m) {
     if (length(v) < 2) return(tk)
     tk[c(which.min(v), which.max(v))]
   }
-  y <- far2(m$axes$y$ticks %||% list())
-  if (isTRUE(m$axes$y_percent) && length(y) && max(vapply(y, function(t) as.numeric(t$value), 0)) <= 1)
-    y <- lapply(y, function(t) { t$value <- t$value * 100; t })
+  y_all <- m$axes$y$ticks %||% list()
+  if (isTRUE(m$axes$y_percent) && length(y_all) && max(vapply(y_all, function(t) as.numeric(t$value), 0)) <= 1)
+    y_all <- lapply(y_all, function(t) { t$value <- t$value * 100; t })
+  ct <- m$axes$curve_type %||% "survival"
+  # all ticks go to the browser, which snaps them and checks they line up (x, y: the two farthest, kept for the record)
   list(xscale = m$axes$x$scale %||% "linear", yscale = m$axes$y$scale %||% "linear", y_percent = isTRUE(m$axes$y_percent),
-       curve_type = m$axes$curve_type %||% "survival", x = far2(m$axes$x$ticks %||% list()), y = y)
+       curve_type = ct, start = if (identical(ct, "cumulative")) "bottom" else "top",
+       x = far2(m$axes$x$ticks %||% list()), y = far2(y_all), x_all = m$axes$x$ticks %||% list(), y_all = y_all)
 }
 
 # The details of one arm for the digitizer fields. The HR goes to the experimental arm only: the arm that is not the reference.
@@ -126,12 +129,19 @@ ai_figure_arm <- function(m, i) {
     tt <- format(times[seq_along(n)][keep], trim = TRUE, drop0trailing = TRUE); nr <- format(n[keep], trim = TRUE)
   } else if (!is.null(m$risk_table)) note <- c(note, "No row of the risk table matches this arm.")
   an <- m$annotations; ref <- tolower(trimws(an$reference_arm %||% ""))
-  give_hr <- !is.null(an$hr) && nzchar(ref) && !(ref %in% tolower(trimws(a$label %||% "")))
+  # the reference arm as printed may be shorter or longer than the legend label ("Control" / "Control (n=248)" / "control group")
+  labs <- tolower(trimws(c(a$label %||% "", a$risk_label %||% ""))); labs <- labs[nzchar(labs)]
+  is_ref <- nzchar(ref) && any(vapply(labs, function(l) grepl(ref, l, fixed = TRUE) || grepl(l, ref, fixed = TRUE), TRUE))
+  give_hr <- !is.null(an$hr) && nzchar(ref) && !is_ref
   if (!is.null(an$hr) && !nzchar(ref)) note <- c(note, "The figure does not say which arm is the reference, so its HR was not filled in.")
   s <- function(x) if (is.null(x)) "" else as.character(x)
-  list(label = a$label %||% paste("Curve", i), times = paste(tt, collapse = ", "), nrisk = paste(nr, collapse = ", "),
+  hex_ok <- function(h) is.character(h) && length(h) == 1 && grepl("^#[0-9A-Fa-f]{6}$", h)
+  others <- Filter(hex_ok, lapply(m$arms[-i], function(o) o$colour_hex))
+  # patients in the arm: the number at risk at time 0, so the details read here are saved with the curve
+  n0 <- if (length(tt) && tt[1] == "0") nr[1] else ""
+  list(label = a$label %||% paste("Curve", i), times = paste(tt, collapse = ", "), nrisk = paste(nr, collapse = ", "), n = n0,
        hr = if (give_hr) s(an$hr) else "", hrlo = if (give_hr) s(an$ci_lower) else "", hrhi = if (give_hr) s(an$ci_upper) else "",
-       hex = a$colour_hex %||% "", note = paste(note, collapse = " "))
+       hex = if (hex_ok(a$colour_hex)) a$colour_hex else "", others = others, note = paste(note, collapse = " "))
 }
 
 # The background job: plain values in, plain values out
